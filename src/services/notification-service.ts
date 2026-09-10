@@ -3,7 +3,7 @@
 // Use notificationsApi from api-service.ts for all notification operations.
 
 // Vite projects use import.meta.env.VITE_* — not process.env.NEXT_PUBLIC_*
-const API_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8080';
+const API_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:1000';
 
 class NotificationService {
   private async fetch(url: string, options?: RequestInit) {

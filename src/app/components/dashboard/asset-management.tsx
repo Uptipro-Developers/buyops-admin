@@ -61,6 +61,7 @@ export function AssetManagement() {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterLocation, setFilterLocation] = useState<string>("all");
   const [filterSource, setFilterSource] = useState<string>("all");
+  const [platformDialogOpen, setPlatformDialogOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -100,6 +101,8 @@ export function AssetManagement() {
 
   // Form state
   const INITIAL_FORM_DATA = {
+    // Platform
+    platform: "",
     // Step 1
     name: "",
     referenceCode: "",
@@ -202,7 +205,7 @@ export function AssetManagement() {
     const statusMatch =
       filterStatus === "all" ||
       String(asset.status || "").toLowerCase() ===
-        String(filterStatus).toLowerCase();
+      String(filterStatus).toLowerCase();
     const locationMatch =
       filterLocation === "all" || asset.location === filterLocation;
     const sourceMatch =
@@ -383,6 +386,7 @@ export function AssetManagement() {
     const asset = assets.find((a) => a.id === assetId);
     if (asset) {
       setFormData({
+        platform: asset.platform ?? "",
         name: asset.name,
         referenceCode: asset.referenceCode ?? "",
         type: asset.type,
@@ -512,6 +516,13 @@ export function AssetManagement() {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleSelectPlatform = (platform: "BUYOPS" | "URBCO") => {
+    setFormData({ ...INITIAL_FORM_DATA, platform });
+    setPlatformDialogOpen(false);
+    setCurrentStep(1);
+    setCreateDialogOpen(true);
+  };
+
   const toggleFacility = (facility: string) => {
     setFormData((prev) => ({
       ...prev,
@@ -616,15 +627,15 @@ export function AssetManagement() {
   const rentalYield =
     formData.projectedRentalIncome && finalPrice > 0
       ? (
-          (parseFloat(formData.projectedRentalIncome) / finalPrice) *
-          100
-        ).toFixed(2)
+        (parseFloat(formData.projectedRentalIncome) / finalPrice) *
+        100
+      ).toFixed(2)
       : "0.00";
   const totalAnnualReturn =
     rentalYield && formData.capitalAppreciation
       ? (
-          parseFloat(rentalYield) + parseFloat(formData.capitalAppreciation)
-        ).toFixed(2)
+        parseFloat(rentalYield) + parseFloat(formData.capitalAppreciation)
+      ).toFixed(2)
       : "0.00";
   const totalCommission =
     (parseFloat(formData.leadCommission) || 0) +
@@ -676,6 +687,67 @@ export function AssetManagement() {
                 )}
               </div>
               <Dialog
+                open={platformDialogOpen}
+                onOpenChange={setPlatformDialogOpen}
+              >
+                <DialogTrigger asChild>
+                  <Button>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Asset
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>Select Asset Platform</DialogTitle>
+                    <DialogDescription>
+                      Choose which platform this asset belongs to. This
+                      determines the entire setup workflow.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                    <div
+                      onClick={() => handleSelectPlatform("BUYOPS")}
+                      className="p-6 border rounded-lg cursor-pointer transition-all hover:border-primary hover:shadow-sm"
+                    >
+                      <div className="h-10 w-10 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-semibold mb-4">
+                        B
+                      </div>
+                      <h4 className="font-medium mb-2">BuyOps</h4>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        Completed or ready-to-sell properties. Focus on
+                        finalized property sales and completed asset
+                        investments.
+                      </p>
+                      <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-4">
+                        <li>Completed properties</li>
+                        <li>Under construction with defined products</li>
+                        <li>Off-plan with finalized specifications</li>
+                        <li>Land parcels ready for sale</li>
+                      </ul>
+                    </div>
+                    <div
+                      onClick={() => handleSelectPlatform("URBCO")}
+                      className="p-6 border rounded-lg cursor-pointer transition-all hover:border-primary hover:shadow-sm"
+                    >
+                      <div className="h-10 w-10 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center font-semibold mb-4">
+                        U
+                      </div>
+                      <h4 className="font-medium mb-2">URBCO</h4>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        Pre-development and inception-stage projects. Early
+                        investors fund projects before completion.
+                      </p>
+                      <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-4">
+                        <li>Planning & feasibility stage</li>
+                        <li>Land acquisition phase</li>
+                        <li>Early construction funding</li>
+                        <li>Can transfer to BuyOps after completion</li>
+                      </ul>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+              <Dialog
                 open={createDialogOpen}
                 onOpenChange={(open) => {
                   setCreateDialogOpen(open);
@@ -690,12 +762,6 @@ export function AssetManagement() {
                   }
                 }}
               >
-                <DialogTrigger asChild>
-                  <Button>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create Asset
-                  </Button>
-                </DialogTrigger>
                 <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
                   <DialogHeader>
                     <DialogTitle>Create New Asset</DialogTitle>
@@ -1236,11 +1302,10 @@ export function AssetManagement() {
                               onClick={() =>
                                 updateFormData("ownershipType", "Full")
                               }
-                              className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                                formData.ownershipType === "Full"
+                              className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${formData.ownershipType === "Full"
                                   ? "border-primary bg-primary/5"
                                   : "border-border hover:border-muted-foreground"
-                              }`}
+                                }`}
                             >
                               <h4 className="font-medium">Full Ownership</h4>
                               <p className="text-xs text-muted-foreground mt-1">
@@ -1251,11 +1316,10 @@ export function AssetManagement() {
                               onClick={() =>
                                 updateFormData("ownershipType", "Fractional")
                               }
-                              className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                                formData.ownershipType === "Fractional"
+                              className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${formData.ownershipType === "Fractional"
                                   ? "border-primary bg-primary/5"
                                   : "border-border hover:border-muted-foreground"
-                              }`}
+                                }`}
                             >
                               <h4 className="font-medium">
                                 Fractional Ownership
@@ -1951,15 +2015,14 @@ export function AssetManagement() {
                                 onClick={() =>
                                   updateFormData("riskLevel", level)
                                 }
-                                className={`p-3 border-2 rounded-lg cursor-pointer text-center transition-all ${
-                                  formData.riskLevel === level
+                                className={`p-3 border-2 rounded-lg cursor-pointer text-center transition-all ${formData.riskLevel === level
                                     ? level === "Low"
                                       ? "border-accent bg-accent/10 text-accent"
                                       : level === "Medium"
                                         ? "border-warning bg-warning/10 text-warning"
                                         : "border-destructive bg-destructive/10 text-destructive"
                                     : "border-border hover:border-muted-foreground"
-                                }`}
+                                  }`}
                               >
                                 <div className="font-medium">{level}</div>
                               </div>
@@ -2061,43 +2124,43 @@ export function AssetManagement() {
                                 "Developer financial stability",
                               ].includes(f),
                           ).length > 0 && (
-                            <div>
-                              <Label className="text-xs mb-2 block">
-                                Custom Risk Factors:
-                              </Label>
-                              <div className="space-y-2">
-                                {formData.riskFactors
-                                  .filter(
-                                    (f) =>
-                                      ![
-                                        "Construction timeline risk (if applicable)",
-                                        "Market volatility in property sector",
-                                        "Rental income may vary based on occupancy",
-                                        "Regulatory and economic factors",
-                                        "Currency fluctuation risk",
-                                        "Developer financial stability",
-                                      ].includes(f),
-                                  )
-                                  .map((factor) => (
-                                    <div
-                                      key={factor}
-                                      className="flex items-center justify-between p-2 bg-background rounded border text-sm"
-                                    >
-                                      <span>{factor}</span>
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => removeRiskFactor(factor)}
-                                        className="h-6 w-6 p-0"
+                              <div>
+                                <Label className="text-xs mb-2 block">
+                                  Custom Risk Factors:
+                                </Label>
+                                <div className="space-y-2">
+                                  {formData.riskFactors
+                                    .filter(
+                                      (f) =>
+                                        ![
+                                          "Construction timeline risk (if applicable)",
+                                          "Market volatility in property sector",
+                                          "Rental income may vary based on occupancy",
+                                          "Regulatory and economic factors",
+                                          "Currency fluctuation risk",
+                                          "Developer financial stability",
+                                        ].includes(f),
+                                    )
+                                    .map((factor) => (
+                                      <div
+                                        key={factor}
+                                        className="flex items-center justify-between p-2 bg-background rounded border text-sm"
                                       >
-                                        <X className="h-3 w-3" />
-                                      </Button>
-                                    </div>
-                                  ))}
+                                        <span>{factor}</span>
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => removeRiskFactor(factor)}
+                                          className="h-6 w-6 p-0"
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </Button>
+                                      </div>
+                                    ))}
+                                </div>
                               </div>
-                            </div>
-                          )}
+                            )}
                         </div>
 
                         {formData.type === "Off Plan" && (
@@ -2516,48 +2579,48 @@ export function AssetManagement() {
                           formData.capitalAppreciationMax ||
                           formData.totalReturnsMin ||
                           formData.totalReturnsMax) && (
-                          <div className="p-4 bg-accent/10 border border-accent rounded-lg">
-                            <h4 className="font-medium text-accent mb-3">
-                              Investment Returns (Projected Ranges)
-                            </h4>
-                            <div className="space-y-2">
-                              {(formData.rentalYieldMin ||
-                                formData.rentalYieldMax) && (
-                                <div className="flex justify-between">
-                                  <span className="text-sm">Rental Yield:</span>
-                                  <span className="font-semibold">
-                                    {formData.rentalYieldMin || "—"}-
-                                    {formData.rentalYieldMax || "—"}%
-                                  </span>
-                                </div>
-                              )}
-                              {(formData.capitalAppreciationMin ||
-                                formData.capitalAppreciationMax) && (
-                                <div className="flex justify-between">
-                                  <span className="text-sm">
-                                    Capital Appreciation:
-                                  </span>
-                                  <span className="font-semibold">
-                                    {formData.capitalAppreciationMin || "—"}-
-                                    {formData.capitalAppreciationMax || "—"}%
-                                  </span>
-                                </div>
-                              )}
-                              {(formData.totalReturnsMin ||
-                                formData.totalReturnsMax) && (
-                                <div className="flex justify-between">
-                                  <span className="text-sm">
-                                    Total Returns:
-                                  </span>
-                                  <span className="font-semibold text-accent">
-                                    {formData.totalReturnsMin || "—"}-
-                                    {formData.totalReturnsMax || "—"}%
-                                  </span>
-                                </div>
-                              )}
+                            <div className="p-4 bg-accent/10 border border-accent rounded-lg">
+                              <h4 className="font-medium text-accent mb-3">
+                                Investment Returns (Projected Ranges)
+                              </h4>
+                              <div className="space-y-2">
+                                {(formData.rentalYieldMin ||
+                                  formData.rentalYieldMax) && (
+                                    <div className="flex justify-between">
+                                      <span className="text-sm">Rental Yield:</span>
+                                      <span className="font-semibold">
+                                        {formData.rentalYieldMin || "—"}-
+                                        {formData.rentalYieldMax || "—"}%
+                                      </span>
+                                    </div>
+                                  )}
+                                {(formData.capitalAppreciationMin ||
+                                  formData.capitalAppreciationMax) && (
+                                    <div className="flex justify-between">
+                                      <span className="text-sm">
+                                        Capital Appreciation:
+                                      </span>
+                                      <span className="font-semibold">
+                                        {formData.capitalAppreciationMin || "—"}-
+                                        {formData.capitalAppreciationMax || "—"}%
+                                      </span>
+                                    </div>
+                                  )}
+                                {(formData.totalReturnsMin ||
+                                  formData.totalReturnsMax) && (
+                                    <div className="flex justify-between">
+                                      <span className="text-sm">
+                                        Total Returns:
+                                      </span>
+                                      <span className="font-semibold text-accent">
+                                        {formData.totalReturnsMin || "—"}-
+                                        {formData.totalReturnsMax || "—"}%
+                                      </span>
+                                    </div>
+                                  )}
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          )}
 
                         <div className="p-4 bg-muted rounded-lg">
                           <h4 className="font-medium mb-3">
@@ -3254,11 +3317,10 @@ export function AssetManagement() {
                               onClick={() =>
                                 updateFormData("ownershipType", "Full")
                               }
-                              className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                                formData.ownershipType === "Full"
+                              className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${formData.ownershipType === "Full"
                                   ? "border-primary bg-primary/5"
                                   : "border-border hover:border-muted-foreground"
-                              }`}
+                                }`}
                             >
                               <h4 className="font-medium">Full Ownership</h4>
                               <p className="text-xs text-muted-foreground mt-1">
@@ -3269,11 +3331,10 @@ export function AssetManagement() {
                               onClick={() =>
                                 updateFormData("ownershipType", "Fractional")
                               }
-                              className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                                formData.ownershipType === "Fractional"
+                              className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${formData.ownershipType === "Fractional"
                                   ? "border-primary bg-primary/5"
                                   : "border-border hover:border-muted-foreground"
-                              }`}
+                                }`}
                             >
                               <h4 className="font-medium">
                                 Fractional Ownership
@@ -3967,15 +4028,14 @@ export function AssetManagement() {
                                 onClick={() =>
                                   updateFormData("riskLevel", level)
                                 }
-                                className={`p-3 border-2 rounded-lg cursor-pointer text-center transition-all ${
-                                  formData.riskLevel === level
+                                className={`p-3 border-2 rounded-lg cursor-pointer text-center transition-all ${formData.riskLevel === level
                                     ? level === "Low"
                                       ? "border-accent bg-accent/10 text-accent"
                                       : level === "Medium"
                                         ? "border-warning bg-warning/10 text-warning"
                                         : "border-destructive bg-destructive/10 text-destructive"
                                     : "border-border hover:border-muted-foreground"
-                                }`}
+                                  }`}
                               >
                                 <div className="font-medium">{level}</div>
                               </div>
@@ -4074,43 +4134,43 @@ export function AssetManagement() {
                                 "Developer financial stability",
                               ].includes(f),
                           ).length > 0 && (
-                            <div>
-                              <Label className="text-xs mb-2 block">
-                                Custom Risk Factors:
-                              </Label>
-                              <div className="space-y-2">
-                                {formData.riskFactors
-                                  .filter(
-                                    (f) =>
-                                      ![
-                                        "Construction timeline risk (if applicable)",
-                                        "Market volatility in property sector",
-                                        "Rental income may vary based on occupancy",
-                                        "Regulatory and economic factors",
-                                        "Currency fluctuation risk",
-                                        "Developer financial stability",
-                                      ].includes(f),
-                                  )
-                                  .map((factor) => (
-                                    <div
-                                      key={factor}
-                                      className="flex items-center justify-between p-2 bg-background rounded border text-sm"
-                                    >
-                                      <span>{factor}</span>
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => removeRiskFactor(factor)}
-                                        className="h-6 w-6 p-0"
+                              <div>
+                                <Label className="text-xs mb-2 block">
+                                  Custom Risk Factors:
+                                </Label>
+                                <div className="space-y-2">
+                                  {formData.riskFactors
+                                    .filter(
+                                      (f) =>
+                                        ![
+                                          "Construction timeline risk (if applicable)",
+                                          "Market volatility in property sector",
+                                          "Rental income may vary based on occupancy",
+                                          "Regulatory and economic factors",
+                                          "Currency fluctuation risk",
+                                          "Developer financial stability",
+                                        ].includes(f),
+                                    )
+                                    .map((factor) => (
+                                      <div
+                                        key={factor}
+                                        className="flex items-center justify-between p-2 bg-background rounded border text-sm"
                                       >
-                                        <X className="h-3 w-3" />
-                                      </Button>
-                                    </div>
-                                  ))}
+                                        <span>{factor}</span>
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => removeRiskFactor(factor)}
+                                          className="h-6 w-6 p-0"
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </Button>
+                                      </div>
+                                    ))}
+                                </div>
                               </div>
-                            </div>
-                          )}
+                            )}
                         </div>
 
                         {formData.type === "Off Plan" && (
@@ -4729,6 +4789,7 @@ export function AssetManagement() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Platform</TableHead>
                   <TableHead>Asset Info</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Location</TableHead>
@@ -4743,6 +4804,25 @@ export function AssetManagement() {
               <TableBody>
                 {filteredAssets.map((asset) => (
                   <TableRow key={asset.id}>
+                    <TableCell>
+                      {asset.platform === "URBCO" ? (
+                        <Badge
+                          variant="outline"
+                          className="border-purple-400 text-purple-700 bg-purple-50"
+                        >
+                          URBCO
+                        </Badge>
+                      ) : asset.platform === "BUYOPS" ? (
+                        <Badge
+                          variant="outline"
+                          className="border-blue-400 text-blue-700 bg-blue-50"
+                        >
+                          BuyOps
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <div>
                         <div className="flex items-center gap-2">
@@ -4801,9 +4881,9 @@ export function AssetManagement() {
                       >
                         {asset.riskLevel
                           ? asset.riskLevel
-                              .toLowerCase()
-                              .replace(/_/g, " ")
-                              .replace(/\b\w/g, (c: string) => c.toUpperCase())
+                            .toLowerCase()
+                            .replace(/_/g, " ")
+                            .replace(/\b\w/g, (c: string) => c.toUpperCase())
                           : "—"}
                       </Badge>
                     </TableCell>
@@ -4822,9 +4902,9 @@ export function AssetManagement() {
                       >
                         {asset.status
                           ? asset.status
-                              .toLowerCase()
-                              .replace(/_/g, " ")
-                              .replace(/\b\w/g, (c: string) => c.toUpperCase())
+                            .toLowerCase()
+                            .replace(/_/g, " ")
+                            .replace(/\b\w/g, (c: string) => c.toUpperCase())
                           : "—"}
                       </Badge>
                     </TableCell>
@@ -5303,7 +5383,7 @@ export function AssetManagement() {
                       </Label>
                       <p className="font-medium">
                         {viewAsset.capitalAppreciationMin &&
-                        viewAsset.capitalAppreciationMax
+                          viewAsset.capitalAppreciationMax
                           ? `${viewAsset.capitalAppreciationMin}% - ${viewAsset.capitalAppreciationMax}%`
                           : "—"}
                       </p>

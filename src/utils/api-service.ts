@@ -9,14 +9,14 @@ import axios from 'axios';
 
 // Create axios instance with base configuration
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:1000',
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
 const refreshClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:1000',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -726,7 +726,7 @@ export const invoicesApi = {
  */
 export const resolveMediaUrl = (url: string | null | undefined): string => {
   if (!url) return '';
-  const apiBase = (import.meta.env.VITE_API_URL || 'http://localhost:8080').replace(/\/$/, '');
+  const apiBase = (import.meta.env.VITE_API_URL || 'http://localhost:1000').replace(/\/$/, '');
   // Already using the correct origin
   if (url.startsWith(apiBase)) return url;
   // Relative path — prepend API base
