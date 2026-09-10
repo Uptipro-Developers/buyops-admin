@@ -8,15 +8,18 @@ import axios from 'axios';
 // const history = createBrowserHistory();
 
 // Create axios instance with base configuration
+const currentUrl = window.location.href;
+const URL = currentUrl.includes('admin-git-development-uptipros-projects') ? 'https://buyops-backend-development.up.railway.app/' : currentUrl.includes('localhost') ? 'http://localhost:8080' : import.meta.env.VITE_API_URL
+
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080',
+  baseURL: URL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
 const refreshClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080',
+  baseURL: URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -726,7 +729,7 @@ export const invoicesApi = {
  */
 export const resolveMediaUrl = (url: string | null | undefined): string => {
   if (!url) return '';
-  const apiBase = (import.meta.env.VITE_API_URL || 'http://localhost:8080').replace(/\/$/, '');
+  const apiBase = (URL).replace(/\/$/, '');
   // Already using the correct origin
   if (url.startsWith(apiBase)) return url;
   // Relative path — prepend API base
