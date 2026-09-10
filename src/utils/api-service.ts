@@ -9,7 +9,7 @@ import axios from 'axios';
 
 // Create axios instance with base configuration
 const currentUrl = window.location.href;
-const URL = currentUrl.includes('admin-git-development-uptipros-projects') ? 'https://buyops-backend-development.up.railway.app/' : currentUrl.includes('localhost') ? 'http://localhost:8080' : import.meta.env.VITE_API_URL
+const URL = currentUrl.includes('admin-git-development-uptipros-projects') ? 'https://buyops-backend-development.up.railway.app/' : currentUrl.includes('localhost') ? 'http://localhost:1000' : import.meta.env.VITE_API_URL
 
 export const api = axios.create({
   baseURL: URL,
