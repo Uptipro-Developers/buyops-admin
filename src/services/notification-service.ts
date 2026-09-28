@@ -2,27 +2,16 @@
 // which uses the configured axios instance with auth headers.
 // Use notificationsApi from api-service.ts for all notification operations.
 
-// Vite projects use import.meta.env.VITE_* — not process.env.NEXT_PUBLIC_*
-const API_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8080';
+import { api } from '@/utils/api-service';
 
 class NotificationService {
   private async fetch(url: string, options?: RequestInit) {
-    const token = localStorage.getItem('access_token');
-
-    const response = await fetch(`${API_URL}${url}`, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-        ...options?.headers,
-      },
+    const response = await api.request({
+      url,
+      method: options?.method || 'GET',
+      data: options?.body,
     });
-
-    if (!response.ok) {
-      throw new Error('Request failed');
-    }
-
-    return response.json();
+    return response.data;
   }
 
   async getNotifications() {

@@ -1,21 +1,11 @@
 import { FeedbackWidget } from "../components/FeedbackWidget";
-import { AnalyticsDashboard } from "./components/dashboard/analytics-dashboard";
-import { CompanyManagement } from "./components/dashboard/company-management";
-import { AssetManagement } from "./components/dashboard/asset-management";
-import { Clusters } from "./components/dashboard/clusters";
-import { Users as UserManagement } from "./components/dashboard/users";
-import { TransactionsCommissions } from "./components/dashboard/transactions-commissions-new";
-import { Reports } from "./components/dashboard/reports";
-import { InstallmentPayments } from "./components/dashboard/installment-payments";
-import { InvoiceEntries } from "./components/dashboard/invoice-entries";
-import { LeadManagement } from "./components/dashboard/lead-management";
+import { assetsApi, transactionsApi } from "../utils/api-service";
 import { NotificationsPopover } from "./components/notifications-popover";
 import { UserDropdown } from "./components/user-dropdown";
 import { useNavigate } from "react-router-dom";
 import { SignIn } from "./components/sign-in";
-import { Settings } from "./components/dashboard/settings";
 import { Toaster } from "./components/ui/sonner";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { ThemeProvider, useTheme } from "./components/theme-provider";
 import { AuthProvider, useAuth } from "./components/auth-provider";
 import { Button } from "./components/ui/button";
@@ -46,8 +36,23 @@ import {
   Navigate,
   NavLink,
 } from "react-router-dom";
-import { ProfilePage } from "./components/profile-page";
-import { PaymentCallback } from "./components/payment-callback";
+const AnalyticsDashboard = lazy(() => import("./components/dashboard/analytics-dashboard").then((m) => ({ default: m.AnalyticsDashboard })));
+const CompanyManagement = lazy(() => import("./components/dashboard/company-management").then((m) => ({ default: m.CompanyManagement })));
+const AssetManagement = lazy(() =>
+  import("./components/dashboard/asset-management").then((module) => ({
+    default: module.AssetManagement,
+  })),
+);
+const Clusters = lazy(() => import("./components/dashboard/clusters").then((m) => ({ default: m.Clusters })));
+const UserManagement = lazy(() => import("./components/dashboard/users").then((m) => ({ default: m.Users })));
+const TransactionsCommissions = lazy(() => import("./components/dashboard/transactions-commissions-new").then((m) => ({ default: m.TransactionsCommissions })));
+const Reports = lazy(() => import("./components/dashboard/reports").then((m) => ({ default: m.Reports })));
+const InstallmentPayments = lazy(() => import("./components/dashboard/installment-payments").then((m) => ({ default: m.InstallmentPayments })));
+const InvoiceEntries = lazy(() => import("./components/dashboard/invoice-entries").then((m) => ({ default: m.InvoiceEntries })));
+const LeadManagement = lazy(() => import("./components/dashboard/lead-management").then((m) => ({ default: m.LeadManagement })));
+const Settings = lazy(() => import("./components/dashboard/settings").then((m) => ({ default: m.Settings })));
+const ProfilePage = lazy(() => import("./components/profile-page").then((m) => ({ default: m.ProfilePage })));
+const PaymentCallback = lazy(() => import("./components/payment-callback").then((m) => ({ default: m.PaymentCallback })));
 
 // FIXED NAVIGATION GROUPS
 const navigationGroups = [
@@ -118,14 +123,12 @@ function DashboardContent() {
 
     setSearching(true);
     try {
-      // Import APIs dynamically to avoid circular deps
-      const { assetsApi, transactionsApi } =
-        await import("../utils/api-service");
-      const [assets, transactions] = await Promise.all([
-        assetsApi.getAll(),
+      const q = searchQuery.trim().toLowerCase();
+      const [assetResponse, transactions] = await Promise.all([
+        assetsApi.getAll({ search: q, limit: 10 }),
         transactionsApi.getAll(),
       ]);
-      const q = searchQuery.trim().toLowerCase();
+      const assets = Array.isArray(assetResponse) ? assetResponse : assetResponse.data;
       // Filter assets by name, id, location, or type
       const assetResults = (assets || []).filter(
         (a: any) =>
@@ -291,10 +294,14 @@ function DashboardContent() {
                 No results found for "{searchQuery}"
               </div>
             )}
+            <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
             <Routes>
               <Route path="/dashboard" element={<AnalyticsDashboard />} />
               <Route path="/companies" element={<CompanyManagement />} />
-              <Route path="/assets" element={<AssetManagement />} />
+              <Route
+                path="/assets"
+                element={<AssetManagement />}
+              />
               <Route path="/leads" element={<LeadManagement />} />
               <Route path="/clusters" element={<Clusters />} />
               <Route path="/users" element={<UserManagement />} />
@@ -310,6 +317,7 @@ function DashboardContent() {
               <Route path="/payments/callback" element={<PaymentCallback />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
+            </Suspense>
           </div>
         </main>
       </div>
