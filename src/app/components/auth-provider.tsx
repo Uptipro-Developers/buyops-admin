@@ -6,7 +6,7 @@ import {
   ReactNode,
 } from "react";
 import { useNavigate } from "react-router-dom";
-import { authApi } from "../../utils/api-service";
+import { authApi, setAccessToken } from "../../utils/api-service";
 
 interface User {
   email: string;
@@ -53,8 +53,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const storedUser = localStorage.getItem("buyops_user");
-    setUser(storedUser ? JSON.parse(storedUser) : null);
-    setIsReady(true);
+    if (!storedUser) {
+      setIsReady(true);
+      return;
+    }
+    authApi.refreshSession()
+      .then((session) => {
+        if (session.user?.role?.toUpperCase() !== "ADMIN") throw new Error("Not an admin");
+        localStorage.setItem("buyops_user", JSON.stringify(session.user));
+        setUser(session.user);
+      })
+      .catch(() => {
+        localStorage.removeItem("buyops_user");
+        setAccessToken(null);
+        setUser(null);
+      })
+      .finally(() => setIsReady(true));
   }, []);
 
   const updateUser = (updates: Partial<User>) => {
@@ -76,13 +90,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           interimToken: data.interimToken,
         };
       }
-      if (data && data.user && data.access_token && data.refresh_token) {
+      if (data && data.user && data.access_token) {
         if (data.user.role?.toUpperCase() !== "ADMIN") {
           return { ok: false, notAdmin: true };
         }
         localStorage.setItem("buyops_user", JSON.stringify(data.user));
-        localStorage.setItem("access_token", data.access_token);
-        localStorage.setItem("refresh_token", data.refresh_token);
+        setAccessToken(data.access_token);
         setUser(data.user);
         return { ok: true };
       }
@@ -103,8 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return { ok: false, notAdmin: true };
         }
         localStorage.setItem("buyops_user", JSON.stringify(data.user));
-        localStorage.setItem("access_token", data.access_token);
-        localStorage.setItem("refresh_token", data.refresh_token);
+        setAccessToken(data.access_token);
         setUser(data.user);
         return { ok: true };
       }
@@ -115,10 +127,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    // await authApi.logout();
+    await authApi.logout().catch(() => undefined);
     localStorage.removeItem("buyops_user");
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
+    setAccessToken(null);
     setUser(null);
     navigate("/sign-in", { replace: true });
   };

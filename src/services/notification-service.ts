@@ -11,22 +11,12 @@ const API_URL = currentUrl.includes('admin-git-development-uptipros-projects') ?
 
 class NotificationService {
   private async fetch(url: string, options?: RequestInit) {
-    const token = localStorage.getItem('access_token');
-
-    const response = await fetch(`${API_URL}${url}`, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-        ...options?.headers,
-      },
+    const response = await api.request({
+      url,
+      method: options?.method || 'GET',
+      data: options?.body,
     });
-
-    if (!response.ok) {
-      throw new Error('Request failed');
-    }
-
-    return response.json();
+    return response.data;
   }
 
   async getNotifications() {

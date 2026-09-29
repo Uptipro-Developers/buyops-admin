@@ -25,11 +25,17 @@ const refreshClient = axios.create({
   },
 });
 
-// Add auth token to requests
+let accessToken: string | null = null;
+let refreshPromise: Promise<string> | null = null;
+
+export const setAccessToken = (token: string | null) => {
+  accessToken = token;
+};
+
+// Access tokens stay in memory; the refresh token is an HttpOnly cookie.
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+  if (accessToken) {
+    config.headers.Authorization = `Bearer ${accessToken}`;
   }
   return config;
 });
@@ -47,29 +53,20 @@ api.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
-        const refreshToken = localStorage.getItem('refresh_token');
-        if (!refreshToken) {
-          throw new Error('Missing refresh token');
-        }
-        const response = await refreshClient.post(
-          '/auth/refresh',
-          { refreshToken },
-          {
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-            },
-          }
-        );
-
-        const { access_token } = response.data;
-        localStorage.setItem('access_token', access_token);
+        refreshPromise ??= refreshClient.post('/auth/refresh', {}).then((response) => {
+          const token = response.data.access_token as string;
+          setAccessToken(token);
+          return token;
+        }).finally(() => {
+          refreshPromise = null;
+        });
+        const access_token = await refreshPromise;
 
         originalRequest.headers.Authorization = `Bearer ${access_token}`;
-        return axios(originalRequest);
+        return api(originalRequest);
       } catch (refreshError) {
         localStorage.removeItem('buyops_user');
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
+        setAccessToken(null);
         if (window.location.pathname !== '/sign-in') {
           window.location.href = '/sign-in?reason=session-expired';
         }
@@ -98,6 +95,12 @@ export const authApi = {
     role: string;
   }) => {
     const response = await api.post('/auth/register', data);
+    return response.data;
+  },
+
+  refreshSession: async () => {
+    const response = await refreshClient.post('/auth/refresh', {});
+    setAccessToken(response.data.access_token);
     return response.data;
   },
 
@@ -209,7 +212,8 @@ export const companiesApi = {
 // ══════════════════════════════════════════════════════════════════════════
 
 export const assetsApi = {
-  getAll: async (filters?: any) => (await api.get("/assets", { params: filters })).data,
+  getAll: async (filters?: any, signal?: AbortSignal) =>
+    (await api.get("/assets", { params: filters, signal })).data,
   getById: async (id: string) => (await api.get(`/assets/${id}`)).data,
   create: async (data: any) => (await api.post("/assets", data)).data,
   update: async (id: string, data: any) => (await api.put(`/assets/${id}`, data)).data,
@@ -232,6 +236,10 @@ export const assetsApi = {
     (await api.post(`/assets/${id}/documents`, documentData)).data,
   deleteDocument: async (assetId: string, documentId: string) =>
     (await api.delete(`/assets/${assetId}/documents/${documentId}`)).data,
+  downloadDocument: async (assetId: string, documentId: string) =>
+    (await api.get(`/assets/${assetId}/documents/${documentId}/download`, {
+      responseType: 'blob',
+    })).data as Blob,
   // Search assets by name or id (server-side filtering)
   getBySearch: async (query: { name?: string; id?: string }) =>
     (await api.get("/assets", { params: query })).data,
