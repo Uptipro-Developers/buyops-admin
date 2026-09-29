@@ -113,8 +113,8 @@ export function AssetManagement() {
   const [filterType, setFilterType] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterLocation, setFilterLocation] = useState<string>("all");
-  const [filterSource, setFilterSource] = useState<string>("all");
-  const [platformDialogOpen, setPlatformDialogOpen] = useState(false);
+  const [filterCompany, setFilterCompany] = useState<string>("all");
+
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -178,9 +178,6 @@ export function AssetManagement() {
 
   // Form State
   const INITIAL_FORM_DATA = {
-    // Platform
-    platform: "",
-    // Step 1
     name: "",
     referenceCode: "",
     type: "Off Plan",
@@ -300,56 +297,15 @@ export function AssetManagement() {
     );
   };
 
-  const locations = Array.from(new Set(assets.map((a) => a.location)));
-
-  const filteredAssets = assets.filter((asset) => {
-    const typeMatch =
-      filterType === "all" ||
-      asset.type.toLowerCase() === filterType.toLowerCase();
-    const statusMatch =
-      filterStatus === "all" ||
-      String(asset.status || "").toLowerCase() ===
-      String(filterStatus).toLowerCase();
-    const locationMatch =
-      filterLocation === "all" || asset.location === filterLocation;
-    const sourceMatch =
-      filterSource === "all" ||
-      (filterSource === "urbco"
-        ? !!asset.urbcoPropertyId
-        : !asset.urbcoPropertyId);
-    return typeMatch && statusMatch && locationMatch && sourceMatch;
-  });
-
-  const totalSteps = 9;
-
-  const validateStep1 = () => {
-    const requiredFields = [
-      { field: "name", label: "Asset Name" },
-      { field: "referenceCode", label: "Asset Reference Code" },
-      { field: "type", label: "Asset Type" },
-      { field: "projectStatus", label: "Project Status" },
-      { field: "location", label: "Location" },
-      { field: "address", label: "Full Address" },
-      { field: "company", label: "Company" },
-    ];
-
-    const missingFields = requiredFields.filter(
-      ({ field }) => !formData[field as keyof typeof formData],
-    );
-
-    if (missingFields.length > 0) {
-      const fieldNames = missingFields.map((f) => f.label).join(", ");
-      toast.error(`Please fill in all required fields: ${fieldNames}`);
-      return false;
-    }
-
-    // Validate end date is not before start date
-    if (formData.constructionStart && formData.constructionEnd) {
-      const start = new Date(formData.constructionStart);
-      const end = new Date(formData.constructionEnd);
-      if (end < start) {
-        toast.error("End date cannot be before start date.");
-        return false;
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files) {
+      const allowed = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+      const newImages = Array.from(files).filter((file) => allowed.has(file.type) && file.size <= 5 * 1024 * 1024);
+      if (newImages.length !== files.length) toast.error("Images must be JPG, PNG, GIF, or WebP and no larger than 5 MB");
+      if (uploadedImages.length + newImages.length > 5) {
+        toast.error("You can upload at most 5 images");
+        return;
       }
       setUploadedImages((prev) => [...prev, ...newImages]);
       setFormData((prev) => ({ ...prev, images: prev.images + newImages.length }));
@@ -364,177 +320,11 @@ export function AssetManagement() {
         "application/pdf", "application/msword",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain",
       ]);
-      setAssets(a);
-      setCompanies(c);
-    } catch (err) {
-      // handle error
-    }
-  };
-
-  const buildAssetPayload = (data: typeof formData) => {
-    const {
-      company,
-      sharedFacilities,
-      costPerFraction,
-      basePrice,
-      furnishingStatus,
-      constructionProgress,
-      ...rest
-    } = data as any;
-
-    return {
-      ...rest,
-      companyId: company,
-      // Map frontend field names to backend field names
-      facilities: sharedFacilities,
-      fractionCost: costPerFraction,
-      price: basePrice,
-      furnished: furnishingStatus,
-      constructionStage: constructionProgress,
-      unitConfiguration: Array.isArray(data.unitConfiguration)
-        ? (data.unitConfiguration as string[]).join(", ")
-        : data.unitConfiguration || "",
-    };
-  };
-
-  const handleSubmit = async (statusOverride?: string) => {
-    if (!formData.company) {
-      const message = "Please select a company";
-      setError(message);
-      toast.error(message);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const dataToSubmit = statusOverride
-        ? { ...formData, status: statusOverride }
-        : formData;
-      const createdAsset = await assetsApi.create(
-        buildAssetPayload(dataToSubmit),
-      );
-
-      // Upload images if any
-      if (uploadedImages.length > 0) {
-        const imageFormData = new FormData();
-        uploadedImages.forEach((file) => {
-          imageFormData.append("images", file);
-        });
-        try {
-          await assetsApi.uploadImages(createdAsset.id, imageFormData);
-          toast.success(`${uploadedImages.length} image(s) uploaded`);
-        } catch (imgErr) {
-          console.error("Image upload failed:", imgErr);
-          toast.error("Some images failed to upload");
-        }
-      }
-
-      // Upload documents if any
-      if (uploadedDocuments.length > 0) {
-        const docFormData = new FormData();
-        uploadedDocuments.forEach((file) => {
-          docFormData.append("documents", file);
-        });
-        try {
-          await assetsApi.uploadDocuments(createdAsset.id, docFormData);
-          toast.success(`${uploadedDocuments.length} document(s) uploaded`);
-        } catch (docErr) {
-          console.error("Document upload failed:", docErr);
-          toast.error("Some documents failed to upload");
-        }
-      }
-
-      await fetchAssets();
-      setCreateDialogOpen(false);
-      setCurrentStep(1);
-      setFormData(INITIAL_FORM_DATA);
-      setMarkupPct("");
-      setCustomPctInput("");
-      // Reset file uploads
-      setUploadedImages([]);
-      setUploadedDocuments([]);
-      toast.success("Asset created successfully");
-    } catch (err: any) {
-      const message = extractError(err);
-      setError(message);
-      toast.error(message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleEdit = (assetId: string) => {
-    setSelectedAssetId(assetId);
-    const asset = assets.find((a) => a.id === assetId);
-    if (asset) {
-      setFormData({
-        platform: asset.platform ?? "",
-        name: asset.name,
-        referenceCode: asset.referenceCode ?? "",
-        type: asset.type,
-        projectStatus: asset.projectStatus,
-        location: asset.location,
-        address: asset.address ?? "",
-        company: asset.company?.id ?? asset.companyId ?? "",
-        landSize: asset.landSize ?? "",
-        builtSize: asset.builtSize ?? "",
-        constructionStart: asset.constructionStart ?? "",
-        constructionEnd: asset.constructionEnd ?? "",
-        propertyCategory: asset.propertyCategory ?? "",
-        totalUnits: asset.totalUnits?.toString() ?? "",
-        availableUnits: asset.availableUnits?.toString() ?? "",
-        unitConfiguration: asset.unitConfiguration
-          ? asset.unitConfiguration.split(", ").filter(Boolean)
-          : [],
-        furnishingStatus: asset.furnished ?? "",
-        sharedFacilities: asset.facilities ?? [],
-        facilityManagement: asset.facilityManagement ?? true,
-        ownershipType: (() => {
-          const ot = asset.ownershipType ?? "Full";
-          if (ot.toLowerCase() === "fractional") return "Fractional";
-          return "Full";
-        })(),
-        fractionTotal: asset.fractionTotal?.toString() ?? "",
-        costPerFraction: asset.fractionCost?.toString() ?? "",
-        landUnitType: asset.landUnitType ?? "",
-        landUnitCount: asset.landUnitCount?.toString() ?? "",
-        basePrice: asset.price?.toString() ?? "",
-        markup: asset.markup?.toString() ?? "",
-        paymentOptions: asset.paymentOptions ?? [],
-        installmentPeriods: asset.installmentPeriods ?? [],
-        downPaymentAmount: asset.downPaymentAmount?.toString() ?? "",
-        offPlanDiscount: asset.offPlanDiscount?.toString() ?? "",
-        stageBasedDiscount: asset.stageBasedDiscount?.toString() ?? "",
-        projectedRentalIncome: asset.projectedRentalIncome?.toString() ?? "",
-        rentalFrequency: asset.rentalFrequency ?? "Annual",
-        operatingCost: asset.operatingCost?.toString() ?? "",
-        capitalAppreciation: asset.capitalAppreciation?.toString() ?? "",
-        firstPayoutDate: asset.firstPayoutDate ?? "",
-        rentalYieldMin: asset.rentalYieldMin?.toString() ?? "",
-        rentalYieldMax: asset.rentalYieldMax?.toString() ?? "",
-        capitalAppreciationMin: asset.capitalAppreciationMin?.toString() ?? "",
-        capitalAppreciationMax: asset.capitalAppreciationMax?.toString() ?? "",
-        totalReturnsMin: asset.totalReturnsMin?.toString() ?? "",
-        totalReturnsMax: asset.totalReturnsMax?.toString() ?? "",
-        constructionProgress: asset.constructionStage?.toString() ?? "",
-        riskLevel: asset.riskLevel ?? "Low",
-        riskFactors: asset.riskFactors ?? [],
-        customRiskFactor: "",
-        offPlanSecurity: asset.offPlanSecurity ?? "",
-        exitLiquidity: asset.exitLiquidity ?? "High",
-        managementMode: asset.managementMode ?? "BuyOps-managed",
-        images: asset.images?.length ?? 0,
-        documents: asset.documents?.length ?? 0,
-        virtualTours:
-          typeof asset.virtualTours === "number" ? asset.virtualTours : 0,
-        leadCommission: asset.leadCommission?.toString() ?? "",
-        closerCommission: asset.closerCommission?.toString() ?? "",
-        status: asset.status,
-      });
-      setEditDialogOpen(true);
-      setMarkupPct("CUSTOM"); // Show existing markup as custom amount when editing
-      if (asset.markup && asset.price) {
-        setCustomPctInput(((asset.markup / asset.price) * 100).toFixed(2));
+      const newDocuments = Array.from(files).filter((file) => allowed.has(file.type) && file.size <= 10 * 1024 * 1024);
+      if (newDocuments.length !== files.length) toast.error("Documents must be PDF, DOC, DOCX, or TXT and no larger than 10 MB");
+      if (uploadedDocuments.length + newDocuments.length > 5) {
+        toast.error("You can upload at most 5 documents");
+        return;
       }
       setUploadedDocuments((prev) => [...prev, ...newDocuments]);
       setFormData((prev) => ({ ...prev, documents: prev.documents + newDocuments.length }));
@@ -572,13 +362,6 @@ export function AssetManagement() {
     filterStatus !== "all" ||
     filterLocation !== "all" ||
     filterCompany !== "all";
-
-  const handleSelectPlatform = (platform: "BUYOPS" | "URBCO") => {
-    setFormData({ ...INITIAL_FORM_DATA, platform });
-    setPlatformDialogOpen(false);
-    setCurrentStep(1);
-    setCreateDialogOpen(true);
-  };
 
   const toggleFacility = (facility: string) => {
     setFormData((prev) => ({
@@ -655,19 +438,29 @@ export function AssetManagement() {
   // Calculated values
   const finalPrice =
     (parseFloat(formData.basePrice) || 0) + (parseFloat(formData.markup) || 0);
-  const rentalYield =
-    formData.projectedRentalIncome && finalPrice > 0
-      ? (
-        (parseFloat(formData.projectedRentalIncome) / finalPrice) *
-        100
-      ).toFixed(2)
-      : "0.00";
-  const totalAnnualReturn =
-    rentalYield && formData.capitalAppreciation
-      ? (
-        parseFloat(rentalYield) + parseFloat(formData.capitalAppreciation)
-      ).toFixed(2)
-      : "0.00";
+  const rentalFrequencyMultiplier =
+    formData.rentalFrequency === "Monthly"
+      ? 12
+      : formData.rentalFrequency === "Quarterly"
+        ? 4
+        : formData.rentalFrequency === "Semi-Annual"
+          ? 2
+          : formData.rentalFrequency === "Annual"
+            ? 1
+            : 0;
+  const annualRentalIncome =
+    (parseFloat(formData.projectedRentalIncome) || 0) *
+    rentalFrequencyMultiplier;
+  const rentalYieldValue =
+    parseFloat(formData.basePrice) > 0 && rentalFrequencyMultiplier > 0
+      ? (100 *
+          (annualRentalIncome - (parseFloat(formData.operatingCost) || 0))) /
+        parseFloat(formData.basePrice)
+      : 0;
+  const rentalYield = rentalYieldValue.toFixed(2);
+  const totalAnnualReturnValue =
+    rentalYieldValue + (parseFloat(formData.capitalAppreciation) || 0);
+  const totalAnnualReturn = totalAnnualReturnValue.toFixed(2);
   const totalCommission =
     (parseFloat(formData.leadCommission) || 0) +
     (parseFloat(formData.closerCommission) || 0);
@@ -1298,67 +1091,6 @@ export function AssetManagement() {
 
               {/* Create Asset Trigger */}
               <Dialog
-                open={platformDialogOpen}
-                onOpenChange={setPlatformDialogOpen}
-              >
-                <DialogTrigger asChild>
-                  <Button>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create Asset
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-2xl">
-                  <DialogHeader>
-                    <DialogTitle>Select Asset Platform</DialogTitle>
-                    <DialogDescription>
-                      Choose which platform this asset belongs to. This
-                      determines the entire setup workflow.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                    <div
-                      onClick={() => handleSelectPlatform("BUYOPS")}
-                      className="p-6 border rounded-lg cursor-pointer transition-all hover:border-primary hover:shadow-sm"
-                    >
-                      <div className="h-10 w-10 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-semibold mb-4">
-                        B
-                      </div>
-                      <h4 className="font-medium mb-2">BuyOps</h4>
-                      <p className="text-sm text-muted-foreground mb-3">
-                        Completed or ready-to-sell properties. Focus on
-                        finalized property sales and completed asset
-                        investments.
-                      </p>
-                      <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-4">
-                        <li>Completed properties</li>
-                        <li>Under construction with defined products</li>
-                        <li>Off-plan with finalized specifications</li>
-                        <li>Land parcels ready for sale</li>
-                      </ul>
-                    </div>
-                    <div
-                      onClick={() => handleSelectPlatform("URBCO")}
-                      className="p-6 border rounded-lg cursor-pointer transition-all hover:border-primary hover:shadow-sm"
-                    >
-                      <div className="h-10 w-10 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center font-semibold mb-4">
-                        U
-                      </div>
-                      <h4 className="font-medium mb-2">URBCO</h4>
-                      <p className="text-sm text-muted-foreground mb-3">
-                        Pre-development and inception-stage projects. Early
-                        investors fund projects before completion.
-                      </p>
-                      <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-4">
-                        <li>Planning & feasibility stage</li>
-                        <li>Land acquisition phase</li>
-                        <li>Early construction funding</li>
-                        <li>Can transfer to BuyOps after completion</li>
-                      </ul>
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
-              <Dialog
                 open={createDialogOpen}
                 onOpenChange={(open) => {
                   setCreateDialogOpen(open);
@@ -1372,38 +1104,63 @@ export function AssetManagement() {
                   }
                 }}
               >
-                <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-                  <DialogHeader>
-                    <DialogTitle>Create New Asset</DialogTitle>
-                    <DialogDescription>
-                      Step {currentStep} of {totalSteps}:{" "}
-                      {currentStep === 1
-                        ? "Asset Identity & Status"
-                        : currentStep === 2
-                          ? "Physical & Functional Details"
-                          : currentStep === 3
-                            ? "Investment Structure"
-                            : currentStep === 4
-                              ? "Pricing & Payment Logic"
-                              : currentStep === 5
-                                ? "Returns & Projections"
-                                : currentStep === 6
-                                  ? "Risk & Transparency"
-                                  : currentStep === 7
-                                    ? "Media & Documentation"
-                                    : currentStep === 8
-                                      ? "Commission Setup"
-                                      : "Review & Publish"}
-                    </DialogDescription>
-                  </DialogHeader>
-
-                  {/* Progress Bar */}
-                  <div className="px-6">
-                    <Progress
-                      value={(currentStep / totalSteps) * 100}
-                      className="h-2"
-                    />
-                  </div>
+                <DialogTrigger asChild>
+                  <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Asset
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col p-0">
+                  <DialogHeader className="p-6 pb-4 border-b">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <DialogTitle className="text-xl font-bold">
+                          Create New Asset
+                        </DialogTitle>
+                        <DialogDescription className="mt-1 text-sm">
+                          Step {currentStep} of {totalSteps}:{" "}
+                          {currentStep === 1
+                            ? "Asset Identity & Status"
+                            : currentStep === 2
+                              ? "Physical Details & Facilities"
+                              : currentStep === 3
+                                ? "Investment Program & Buying Paths"
+                                : currentStep === 4
+                                  ? "Pricing Logic"
+                                  : currentStep === 5
+                                    ? "Returns Projections"
+                                    : currentStep === 6
+                                      ? "Risk & Management Assessment"
+                                      : currentStep === 7
+                                        ? "Media & Documentation"
+                                        : currentStep === 8
+                                          ? "Commission Setup"
+                                          : "Review & Publish"}
+                        </DialogDescription>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant="outline"
+                          className={
+                            formData.developmentStage === "Before Development"
+                              ? "border-amber-500 text-amber-600 bg-amber-50"
+                              : "border-emerald-500 text-emerald-600 bg-emerald-50"
+                          }
+                        >
+                          {formData.developmentStage}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className={
+                            isHarbor
+                              ? "border-purple-500 text-purple-600 bg-purple-50"
+                              : "border-blue-500 text-blue-600 bg-blue-50"
+                          }
+                        >
+                          {formData.platform}
+                        </Badge>
+                      </div>
+                    </div>
 
                     {/* Progress Bar */}
                     <div className="w-full bg-secondary h-2 rounded-full mt-4 overflow-hidden">
@@ -1994,33 +1751,261 @@ export function AssetManagement() {
                       <div className="space-y-4">
                         {/* Investment Program */}
                         <div>
-                          <Label>Ownership Options *</Label>
-                          <div className="grid grid-cols-2 gap-3 mt-2">
-                            <div
-                              onClick={() =>
-                                updateFormData("ownershipType", "Full")
-                              }
-                              className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${formData.ownershipType === "Full"
-                                  ? "border-primary bg-primary/5"
-                                  : "border-border hover:border-muted-foreground"
-                                }`}
-                            >
-                              <h4 className="font-medium">Full Ownership</h4>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                Single owner purchases entire asset
+                          <Label className="text-base font-semibold mb-1 block">
+                            Investment Program *
+                          </Label>
+                          <p className="text-xs text-muted-foreground mb-2">
+                            Defines the kind of investment this asset carries —
+                            it shapes funding terms, interest structure,
+                            returns and risk disclosure in the steps that
+                            follow.
+                          </p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {PROGRAM_OPTIONS.map((program) => {
+                              const selected =
+                                formData.platform === program.value;
+                              const Icon = program.icon;
+                              return (
+                                <div
+                                  key={program.value}
+                                  onClick={() =>
+                                    handleProgramChange(program.value)
+                                  }
+                                  className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                                    selected
+                                      ? program.value === "Urbco Harbor"
+                                        ? "border-purple-600 bg-purple-50/50 dark:bg-purple-950/20"
+                                        : "border-blue-600 bg-blue-50/50 dark:bg-blue-950/20"
+                                      : "border-border hover:border-muted-foreground"
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2.5 mb-1.5">
+                                    <div
+                                      className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                                        program.value === "Urbco Harbor"
+                                          ? "bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300"
+                                          : "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300"
+                                      }`}
+                                    >
+                                      <Icon className="h-4 w-4" />
+                                    </div>
+                                    <div>
+                                      <h4 className="font-semibold text-sm">
+                                        {program.value}
+                                      </h4>
+                                      <span
+                                        className={`text-xs font-medium ${
+                                          program.value === "Urbco Harbor"
+                                            ? "text-purple-600 dark:text-purple-400"
+                                            : "text-blue-600 dark:text-blue-400"
+                                        }`}
+                                      >
+                                        {program.tag}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground leading-relaxed">
+                                    {program.description}
+                                  </p>
+                                  <ul className="mt-2 space-y-0.5">
+                                    {program.bullets.map((b) => (
+                                      <li
+                                        key={b}
+                                        className="text-[11px] text-muted-foreground flex items-center gap-1.5"
+                                      >
+                                        <span
+                                          className={`w-1 h-1 rounded-full shrink-0 ${
+                                            program.value === "Urbco Harbor"
+                                              ? "bg-purple-500"
+                                              : "bg-blue-500"
+                                          }`}
+                                        />
+                                        {b}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div>
+                          <Label className="text-base font-semibold mb-1 block">
+                            Buying Paths *
+                          </Label>
+                          <p className="text-xs text-muted-foreground mb-2">
+                            UML §1 Buy-In — choose how buyers may acquire this
+                            asset. Enable one or both paths; each path carries
+                            its own terms, payment options and fund-release
+                            rules in the steps that follow.
+                          </p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {BUYING_PATH_OPTIONS.map((path) => {
+                              const selected = formData.buyingPaths.includes(
+                                path.value,
+                              );
+                              const PathIcon = path.icon;
+                              return (
+                                <div
+                                  key={path.value}
+                                  onClick={() => handlePathToggle(path.value)}
+                                  className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                                    selected
+                                      ? "border-primary bg-primary/5"
+                                      : "border-border hover:border-muted-foreground"
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <div className="flex items-center gap-2.5">
+                                      <div
+                                        className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                                          selected
+                                            ? "bg-primary/10 text-primary"
+                                            : "bg-muted text-muted-foreground"
+                                        }`}
+                                      >
+                                        <PathIcon className="h-4 w-4" />
+                                      </div>
+                                      <div>
+                                        <h4 className="font-semibold text-sm">
+                                          {path.value}
+                                        </h4>
+                                        <span
+                                          className={`text-[11px] font-medium ${
+                                            selected
+                                              ? "text-primary"
+                                              : "text-muted-foreground"
+                                          }`}
+                                        >
+                                          {selected
+                                            ? "Enabled"
+                                            : "Click to enable"}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div
+                                      className={`w-5 h-5 rounded-md border-2 flex items-center justify-center ${
+                                        selected
+                                          ? "border-primary bg-primary text-primary-foreground"
+                                          : "border-muted-foreground"
+                                      }`}
+                                    >
+                                      {selected && (
+                                        <CheckCircle2 className="h-3.5 w-3.5" />
+                                      )}
+                                    </div>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground leading-relaxed">
+                                    {path.blurb}
+                                  </p>
+                                  <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed">
+                                    <span className="font-medium text-foreground/80">
+                                      Payment:
+                                    </span>{" "}
+                                    {path.payment}
+                                  </p>
+                                  <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+                                    <span className="font-medium text-foreground/80">
+                                      Terms:
+                                    </span>{" "}
+                                    {path.terms}
+                                  </p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          {formData.buyingPaths.length === 0 && (
+                            <p className="text-xs text-destructive mt-1.5">
+                              Select at least one Buying Path to continue.
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Settlement flow strip — UML §§2-7 (read-only model) */}
+                        {formData.buyingPaths.includes("Investment") && (
+                          <div className="p-3 bg-muted rounded-lg space-y-2">
+                            <div className="flex items-center gap-2">
+                              <Coins className="h-3.5 w-3.5 text-muted-foreground" />
+                              <p className="text-xs font-medium">
+                                Investment settlement flow
                               </p>
                             </div>
-                            <div
-                              onClick={() =>
-                                updateFormData("ownershipType", "Fractional")
-                              }
-                              className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${formData.ownershipType === "Fractional"
-                                  ? "border-primary bg-primary/5"
-                                  : "border-border hover:border-muted-foreground"
-                                }`}
-                            >
-                              <h4 className="font-medium">
-                                Fractional Ownership
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {[
+                                "Terms reviewed",
+                                "Payment instruction",
+                                "Trustee custody",
+                                "Independent reconciliation",
+                                "Fund release",
+                              ].map((step, index, arr) => (
+                                <span
+                                  key={step}
+                                  className="flex items-center gap-1.5"
+                                >
+                                  <span className="px-2 py-0.5 bg-background border rounded-full text-[11px] text-muted-foreground">
+                                    {index + 1}. {step}
+                                  </span>
+                                  {index < arr.length - 1 && (
+                                    <ChevronRight className="h-3 w-3 text-muted-foreground/60" />
+                                  )}
+                                </span>
+                              ))}
+                            </div>
+                            <p className="text-[11px] text-muted-foreground">
+                              The trustee holds funds until reconciliation
+                              clears; releases follow the agreed exit /
+                              redemption terms below.
+                            </p>
+                          </div>
+                        )}
+                        {formData.buyingPaths.includes("Ownership") && (
+                          <div className="p-3 bg-muted rounded-lg space-y-2">
+                            <div className="flex items-center gap-2">
+                              <Home className="h-3.5 w-3.5 text-muted-foreground" />
+                              <p className="text-xs font-medium">
+                                Ownership settlement flow
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {[
+                                "Terms reviewed",
+                                "Payment instruction",
+                                "Trustee custody",
+                                "Independent reconciliation",
+                                formData.releaseBasis === "Milestone-linked"
+                                  ? "Milestone release"
+                                  : "Scheduled release",
+                              ].map((step, index, arr) => (
+                                <span
+                                  key={step}
+                                  className="flex items-center gap-1.5"
+                                >
+                                  <span className="px-2 py-0.5 bg-background border rounded-full text-[11px] text-muted-foreground">
+                                    {index + 1}. {step}
+                                  </span>
+                                  {index < arr.length - 1 && (
+                                    <ChevronRight className="h-3 w-3 text-muted-foreground/60" />
+                                  )}
+                                </span>
+                              ))}
+                            </div>
+                            <p className="text-[11px] text-muted-foreground">
+                              Release is{" "}
+                              {formData.releaseBasis === "Milestone-linked"
+                                ? "unlocked per verified milestone"
+                                : "made against the fixed tranche schedule"}{" "}
+                              — configured below.
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Investment path — UML "Review Investment Terms" */}
+                        {formData.buyingPaths.includes("Investment") && (
+                          <div className="p-4 border border-blue-200 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-950/20 rounded-lg space-y-4">
+                            <div>
+                              <h4 className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                                Investment Terms
                               </h4>
                               <p className="text-xs text-muted-foreground mt-0.5">
                                 Financial interest in the project — payments
@@ -3253,14 +3238,15 @@ export function AssetManagement() {
                                 onClick={() =>
                                   updateFormData("riskLevel", level)
                                 }
-                                className={`p-3 border-2 rounded-lg cursor-pointer text-center transition-all ${formData.riskLevel === level
+                                className={`p-3 border-2 rounded-lg cursor-pointer text-center transition-all ${
+                                  formData.riskLevel === level
                                     ? level === "Low"
                                       ? "border-accent bg-accent/10 text-accent"
                                       : level === "Medium"
                                         ? "border-warning bg-warning/10 text-warning"
                                         : "border-destructive bg-destructive/10 text-destructive"
                                     : "border-border hover:border-muted-foreground"
-                                  }`}
+                                }`}
                               >
                                 <div className="font-medium">{level}</div>
                               </div>
@@ -3347,43 +3333,35 @@ export function AssetManagement() {
                           {formData.riskFactors.filter(
                             (f) => !presetRiskFactors.includes(f),
                           ).length > 0 && (
-                              <div>
-                                <Label className="text-xs mb-2 block">
-                                  Custom Risk Factors:
-                                </Label>
-                                <div className="space-y-2">
-                                  {formData.riskFactors
-                                    .filter(
-                                      (f) =>
-                                        ![
-                                          "Construction timeline risk (if applicable)",
-                                          "Market volatility in property sector",
-                                          "Rental income may vary based on occupancy",
-                                          "Regulatory and economic factors",
-                                          "Currency fluctuation risk",
-                                          "Developer financial stability",
-                                        ].includes(f),
-                                    )
-                                    .map((factor) => (
-                                      <div
-                                        key={factor}
-                                        className="flex items-center justify-between p-2 bg-background rounded border text-sm"
+                            <div>
+                              <Label className="text-xs mb-2 block">
+                                Custom Risk Factors:
+                              </Label>
+                              <div className="space-y-2">
+                                {formData.riskFactors
+                                  .filter(
+                                    (f) => !presetRiskFactors.includes(f),
+                                  )
+                                  .map((factor) => (
+                                    <div
+                                      key={factor}
+                                      className="flex items-center justify-between p-2 bg-background rounded border text-sm"
+                                    >
+                                      <span>{factor}</span>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => removeRiskFactor(factor)}
+                                        className="h-6 w-6 p-0"
                                       >
-                                        <span>{factor}</span>
-                                        <Button
-                                          type="button"
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => removeRiskFactor(factor)}
-                                          className="h-6 w-6 p-0"
-                                        >
-                                          <X className="h-3 w-3" />
-                                        </Button>
-                                      </div>
-                                    ))}
-                                </div>
+                                        <X className="h-3 w-3" />
+                                      </Button>
+                                    </div>
+                                  ))}
                               </div>
-                            )}
+                            </div>
+                          )}
                         </div>
 
                         {formData.type === "Off Plan" && (
@@ -3892,48 +3870,48 @@ export function AssetManagement() {
                           formData.capitalAppreciationMax ||
                           formData.totalReturnsMin ||
                           formData.totalReturnsMax) && (
-                            <div className="p-4 bg-accent/10 border border-accent rounded-lg">
-                              <h4 className="font-medium text-accent mb-3">
-                                Investment Returns (Projected Ranges)
-                              </h4>
-                              <div className="space-y-2">
-                                {(formData.rentalYieldMin ||
-                                  formData.rentalYieldMax) && (
-                                    <div className="flex justify-between">
-                                      <span className="text-sm">Rental Yield:</span>
-                                      <span className="font-semibold">
-                                        {formData.rentalYieldMin || "—"}-
-                                        {formData.rentalYieldMax || "—"}%
-                                      </span>
-                                    </div>
-                                  )}
-                                {(formData.capitalAppreciationMin ||
-                                  formData.capitalAppreciationMax) && (
-                                    <div className="flex justify-between">
-                                      <span className="text-sm">
-                                        Capital Appreciation:
-                                      </span>
-                                      <span className="font-semibold">
-                                        {formData.capitalAppreciationMin || "—"}-
-                                        {formData.capitalAppreciationMax || "—"}%
-                                      </span>
-                                    </div>
-                                  )}
-                                {(formData.totalReturnsMin ||
-                                  formData.totalReturnsMax) && (
-                                    <div className="flex justify-between">
-                                      <span className="text-sm">
-                                        Total Returns:
-                                      </span>
-                                      <span className="font-semibold text-accent">
-                                        {formData.totalReturnsMin || "—"}-
-                                        {formData.totalReturnsMax || "—"}%
-                                      </span>
-                                    </div>
-                                  )}
-                              </div>
+                          <div className="p-4 bg-accent/10 border border-accent rounded-lg">
+                            <h4 className="font-medium text-accent mb-3">
+                              Investment Returns (Projected Ranges)
+                            </h4>
+                            <div className="space-y-2">
+                              {(formData.rentalYieldMin ||
+                                formData.rentalYieldMax) && (
+                                <div className="flex justify-between">
+                                  <span className="text-sm">Rental Yield:</span>
+                                  <span className="font-semibold">
+                                    {formData.rentalYieldMin || "—"}-
+                                    {formData.rentalYieldMax || "—"}%
+                                  </span>
+                                </div>
+                              )}
+                              {(formData.capitalAppreciationMin ||
+                                formData.capitalAppreciationMax) && (
+                                <div className="flex justify-between">
+                                  <span className="text-sm">
+                                    Capital Appreciation:
+                                  </span>
+                                  <span className="font-semibold">
+                                    {formData.capitalAppreciationMin || "—"}-
+                                    {formData.capitalAppreciationMax || "—"}%
+                                  </span>
+                                </div>
+                              )}
+                              {(formData.totalReturnsMin ||
+                                formData.totalReturnsMax) && (
+                                <div className="flex justify-between">
+                                  <span className="text-sm">
+                                    Total Returns:
+                                  </span>
+                                  <span className="font-semibold text-accent">
+                                    {formData.totalReturnsMin || "—"}-
+                                    {formData.totalReturnsMax || "—"}%
+                                  </span>
+                                </div>
+                              )}
                             </div>
-                          )}
+                          </div>
+                        )}
 
                         <div className="p-4 bg-muted rounded-lg">
                           <h4 className="font-medium mb-3">
@@ -5370,37 +5348,90 @@ export function AssetManagement() {
                           )}
                         </div>
 
-                    {/* Step 3: Investment Structure */}
-                    {currentStep === 3 && (
-                      <div className="space-y-4">
-                        <div>
-                          <Label>Ownership Options *</Label>
-                          <div className="grid grid-cols-2 gap-3 mt-2">
-                            <div
-                              onClick={() =>
-                                updateFormData("ownershipType", "Full")
-                              }
-                              className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${formData.ownershipType === "Full"
-                                  ? "border-primary bg-primary/5"
-                                  : "border-border hover:border-muted-foreground"
-                                }`}
-                            >
-                              <h4 className="font-medium">Full Ownership</h4>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                Single owner purchases entire asset
+                        {/* Settlement flow strip — UML §§2-7 (read-only model) */}
+                        {formData.buyingPaths.includes("Investment") && (
+                          <div className="p-3 bg-muted rounded-lg space-y-2">
+                            <div className="flex items-center gap-2">
+                              <Coins className="h-3.5 w-3.5 text-muted-foreground" />
+                              <p className="text-xs font-medium">
+                                Investment settlement flow
                               </p>
                             </div>
-                            <div
-                              onClick={() =>
-                                updateFormData("ownershipType", "Fractional")
-                              }
-                              className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${formData.ownershipType === "Fractional"
-                                  ? "border-primary bg-primary/5"
-                                  : "border-border hover:border-muted-foreground"
-                                }`}
-                            >
-                              <h4 className="font-medium">
-                                Fractional Ownership
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {[
+                                "Terms reviewed",
+                                "Payment instruction",
+                                "Trustee custody",
+                                "Independent reconciliation",
+                                "Fund release",
+                              ].map((step, index, arr) => (
+                                <span
+                                  key={step}
+                                  className="flex items-center gap-1.5"
+                                >
+                                  <span className="px-2 py-0.5 bg-background border rounded-full text-[11px] text-muted-foreground">
+                                    {index + 1}. {step}
+                                  </span>
+                                  {index < arr.length - 1 && (
+                                    <ChevronRight className="h-3 w-3 text-muted-foreground/60" />
+                                  )}
+                                </span>
+                              ))}
+                            </div>
+                            <p className="text-[11px] text-muted-foreground">
+                              The trustee holds funds until reconciliation
+                              clears; releases follow the agreed exit /
+                              redemption terms below.
+                            </p>
+                          </div>
+                        )}
+                        {formData.buyingPaths.includes("Ownership") && (
+                          <div className="p-3 bg-muted rounded-lg space-y-2">
+                            <div className="flex items-center gap-2">
+                              <Home className="h-3.5 w-3.5 text-muted-foreground" />
+                              <p className="text-xs font-medium">
+                                Ownership settlement flow
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {[
+                                "Terms reviewed",
+                                "Payment instruction",
+                                "Trustee custody",
+                                "Independent reconciliation",
+                                formData.releaseBasis === "Milestone-linked"
+                                  ? "Milestone release"
+                                  : "Scheduled release",
+                              ].map((step, index, arr) => (
+                                <span
+                                  key={step}
+                                  className="flex items-center gap-1.5"
+                                >
+                                  <span className="px-2 py-0.5 bg-background border rounded-full text-[11px] text-muted-foreground">
+                                    {index + 1}. {step}
+                                  </span>
+                                  {index < arr.length - 1 && (
+                                    <ChevronRight className="h-3 w-3 text-muted-foreground/60" />
+                                  )}
+                                </span>
+                              ))}
+                            </div>
+                            <p className="text-[11px] text-muted-foreground">
+                              Release is{" "}
+                              {formData.releaseBasis === "Milestone-linked"
+                                ? "unlocked per verified milestone"
+                                : "made against the fixed tranche schedule"}{" "}
+                              — configured below.
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Investment path — UML "Review Investment Terms" */}
+                        {formData.buyingPaths.includes("Investment") && (
+                          <div className="p-4 border border-blue-200 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-950/20 rounded-lg space-y-4">
+                            <div>
+                              <h4 className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                                Investment Terms
                               </h4>
                               <p className="text-xs text-muted-foreground mt-0.5">
                                 Financial interest in the project — payments
@@ -6630,14 +6661,15 @@ export function AssetManagement() {
                                 onClick={() =>
                                   updateFormData("riskLevel", level)
                                 }
-                                className={`p-3 border-2 rounded-lg cursor-pointer text-center transition-all ${formData.riskLevel === level
+                                className={`p-3 border-2 rounded-lg cursor-pointer text-center transition-all ${
+                                  formData.riskLevel === level
                                     ? level === "Low"
                                       ? "border-accent bg-accent/10 text-accent"
                                       : level === "Medium"
                                         ? "border-warning bg-warning/10 text-warning"
                                         : "border-destructive bg-destructive/10 text-destructive"
                                     : "border-border hover:border-muted-foreground"
-                                  }`}
+                                }`}
                               >
                                 <div className="font-medium">{level}</div>
                               </div>
@@ -6721,43 +6753,35 @@ export function AssetManagement() {
                           {formData.riskFactors.filter(
                             (f) => !presetRiskFactors.includes(f),
                           ).length > 0 && (
-                              <div>
-                                <Label className="text-xs mb-2 block">
-                                  Custom Risk Factors:
-                                </Label>
-                                <div className="space-y-2">
-                                  {formData.riskFactors
-                                    .filter(
-                                      (f) =>
-                                        ![
-                                          "Construction timeline risk (if applicable)",
-                                          "Market volatility in property sector",
-                                          "Rental income may vary based on occupancy",
-                                          "Regulatory and economic factors",
-                                          "Currency fluctuation risk",
-                                          "Developer financial stability",
-                                        ].includes(f),
-                                    )
-                                    .map((factor) => (
-                                      <div
-                                        key={factor}
-                                        className="flex items-center justify-between p-2 bg-background rounded border text-sm"
+                            <div>
+                              <Label className="text-xs mb-2 block">
+                                Custom Risk Factors:
+                              </Label>
+                              <div className="space-y-2">
+                                {formData.riskFactors
+                                  .filter(
+                                    (f) => !presetRiskFactors.includes(f),
+                                  )
+                                  .map((factor) => (
+                                    <div
+                                      key={factor}
+                                      className="flex items-center justify-between p-2 bg-background rounded border text-sm"
+                                    >
+                                      <span>{factor}</span>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => removeRiskFactor(factor)}
+                                        className="h-6 w-6 p-0"
                                       >
-                                        <span>{factor}</span>
-                                        <Button
-                                          type="button"
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => removeRiskFactor(factor)}
-                                          className="h-6 w-6 p-0"
-                                        >
-                                          <X className="h-3 w-3" />
-                                        </Button>
-                                      </div>
-                                    ))}
-                                </div>
+                                        <X className="h-3 w-3" />
+                                      </Button>
+                                    </div>
+                                  ))}
                               </div>
-                            )}
+                            </div>
+                          )}
                         </div>
 
                         {formData.type === "Off Plan" && (
@@ -7172,279 +7196,55 @@ export function AssetManagement() {
                                 )}
                               </span>
                             </div>
+                            {formData.buyingPaths.includes("Investment") && (
+                              <div className="flex justify-between items-start">
+                                <span className="text-sm text-muted-foreground">
+                                  Interest Structure:
+                                </span>
+                                <span className="font-medium text-right">
+                                  {formData.ownershipType === "Fractional"
+                                    ? "Fractional Interests"
+                                    : "Single-ticket Interest"}
+                                </span>
+                              </div>
+                            )}
+                            {formData.buyingPaths.includes("Ownership") && (
+                              <div className="flex justify-between items-start">
+                                <span className="text-sm text-muted-foreground">
+                                  Release Basis:
+                                </span>
+                                <span className="font-medium text-right">
+                                  {formData.releaseBasis === "Milestone-linked"
+                                    ? `Milestone-linked (${formData.milestones.length} milestone${formData.milestones.length === 1 ? "" : "s"})`
+                                    : "Scheduled tranche"}
+                                </span>
+                              </div>
+                            )}
+                            <div className="flex justify-between items-start">
+                              <span className="text-sm text-muted-foreground">
+                                Location:
+                              </span>
+                              <span className="font-medium text-right">
+                                {formData.location || "—"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-start">
+                              <span className="text-sm text-muted-foreground">
+                                Property Category:
+                              </span>
+                              <span className="font-medium">
+                                {formData.propertyCategory || "—"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-start">
+                              <span className="text-sm text-muted-foreground">
+                                Total Units:
+                              </span>
+                              <span className="font-medium">
+                                {formData.totalUnits || "—"}
+                              </span>
+                            </div>
                           </div>
-                        </div>
-
-                        <div className="flex items-center justify-between p-4 bg-primary/5 border border-primary rounded-lg">
-                          <div>
-                            <Label className="text-sm font-medium">
-                              Publish Status
-                            </Label>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Toggle to publish asset immediately
-                            </p>
-                          </div>
-                          <Switch
-                            checked={formData.status === "published"}
-                            onCheckedChange={(val) =>
-                              updateFormData(
-                                "status",
-                                val ? "published" : "draft",
-                              )
-                            }
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <DialogFooter className="border-t pt-4 px-6">
-                    <div className="flex justify-between w-full">
-                      <Button
-                        variant="outline"
-                        onClick={prevStep}
-                        disabled={currentStep === 1}
-                      >
-                        <ChevronLeft className="h-4 w-4 mr-1" />
-                        Previous
-                      </Button>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="ghost"
-                          onClick={() => {
-                            setEditDialogOpen(false);
-                            setCurrentStep(1);
-                            setFormData(INITIAL_FORM_DATA);
-                            setCustomFacilityInput("");
-                            setCustomUnitInput("");
-                          }}
-                        >
-                          Cancel
-                        </Button>
-                        {currentStep < totalSteps ? (
-                          <Button onClick={nextStep}>
-                            Next
-                            <ChevronRight className="h-4 w-4 ml-1" />
-                          </Button>
-                        ) : (
-                          <Button onClick={handleUpdate}>Update Asset</Button>
-                        )}
-                      </div>
-                    </div>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-
-              {/* Delete Confirmation Dialog */}
-              <Dialog
-                open={deleteDialogOpen}
-                onOpenChange={setDeleteDialogOpen}
-              >
-                <DialogContent className="max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>Delete Asset</DialogTitle>
-                    <DialogDescription>
-                      Are you sure you want to delete this asset? This action
-                      cannot be undone.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="py-4">
-                    <div className="flex items-start gap-3 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
-                      <CircleAlert className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
-                      <div className="text-sm text-destructive">
-                        Deleting this asset will remove all associated data,
-                        including investment records, media files, and
-                        transaction history. Investors who have purchased units
-                        will be notified.
-                      </div>
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button
-                      variant="outline"
-                      onClick={() => setDeleteDialogOpen(false)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button variant="destructive" onClick={confirmDelete}>
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Delete Asset
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <Label className="text-xs text-muted-foreground mb-2 block">
-                  Asset Type
-                </Label>
-                <Select value={filterType} onValueChange={setFilterType}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Types</SelectItem>
-                    {assetTypes.map((type) => (
-                      <SelectItem key={type} value={type}>
-                        {type}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label className="text-xs text-muted-foreground mb-2 block">
-                  Status
-                </Label>
-                <Select value={filterStatus} onValueChange={setFilterStatus}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Statuses</SelectItem>
-                    {assetStatuses.map((status) => (
-                      <SelectItem key={status} value={status}>
-                        {String(status).toUpperCase()}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label className="text-xs text-muted-foreground mb-2 block">
-                  Location
-                </Label>
-                <Select
-                  value={filterLocation}
-                  onValueChange={setFilterLocation}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Locations</SelectItem>
-                    {locations.map((loc) => (
-                      <SelectItem key={loc} value={loc}>
-                        {loc}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label className="text-xs text-muted-foreground mb-2 block">
-                  Source
-                </Label>
-                <Select value={filterSource} onValueChange={setFilterSource}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Sources</SelectItem>
-                    <SelectItem value="urbco">From Urbco</SelectItem>
-                    <SelectItem value="direct">Direct</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Assets Table */}
-      <Card className="shadow-sm">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Assets ({filteredAssets.length})</CardTitle>
-            <div className="text-sm text-muted-foreground">
-              {
-                filteredAssets.filter(
-                  (a) => String(a.status || "").toLowerCase() === "published",
-                ).length
-              }{" "}
-              PUBLISHED •{" "}
-              {
-                filteredAssets.filter(
-                  (a) => String(a.status || "").toLowerCase() === "draft",
-                ).length
-              }{" "}
-              DRAFT
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Platform</TableHead>
-                  <TableHead>Asset Info</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Location</TableHead>
-                  <TableHead>Units</TableHead>
-                  <TableHead>Final Price</TableHead>
-                  <TableHead>Returns</TableHead>
-                  <TableHead>Risk</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredAssets.map((asset) => (
-                  <TableRow key={asset.id}>
-                    <TableCell>
-                      {asset.platform === "URBCO" ? (
-                        <Badge
-                          variant="outline"
-                          className="border-purple-400 text-purple-700 bg-purple-50"
-                        >
-                          URBCO
-                        </Badge>
-                      ) : asset.platform === "BUYOPS" ? (
-                        <Badge
-                          variant="outline"
-                          className="border-blue-400 text-blue-700 bg-blue-50"
-                        >
-                          BuyOps
-                        </Badge>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">{asset.name}</span>
-                          {asset.urbcoPropertyId && (
-                            <Badge
-                              variant="outline"
-                              className="text-xs border-amber-400 text-amber-700 bg-amber-50"
-                            >
-                              From Urbco
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-1">
-                          {asset.company?.name || "—"}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{asset.type}</Badge>
-                    </TableCell>
-                    <TableCell className="text-sm">{asset.location}</TableCell>
-                    <TableCell className="text-center">
-                      <div className="text-sm">
-                        <div className="font-medium">
-                          {asset.availableUnits}/{asset.totalUnits}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          available
                         </div>
 
                         <div className="p-4 bg-accent/10 border border-accent rounded-lg">
@@ -7510,53 +7310,13 @@ export function AssetManagement() {
                     <div className="flex justify-between w-full">
                       <Button
                         variant="outline"
-                        className={
-                          asset.riskLevel?.toLowerCase() === "low"
-                            ? "border-accent text-accent"
-                            : asset.riskLevel?.toLowerCase() === "medium"
-                              ? "border-warning text-warning"
-                              : "border-destructive text-destructive"
-                        }
+                        onClick={prevStep}
+                        disabled={currentStep === 1}
                       >
-                        {asset.riskLevel
-                          ? asset.riskLevel
-                            .toLowerCase()
-                            .replace(/_/g, " ")
-                            .replace(/\b\w/g, (c: string) => c.toUpperCase())
-                          : "—"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          asset.status?.toLowerCase() === "published"
-                            ? "default"
-                            : "secondary"
-                        }
-                        className={
-                          asset.status?.toLowerCase() === "published"
-                            ? "bg-accent text-accent-foreground"
-                            : ""
-                        }
-                      >
-                        {asset.status
-                          ? asset.status
-                            .toLowerCase()
-                            .replace(/_/g, " ")
-                            .replace(/\b\w/g, (c: string) => c.toUpperCase())
-                          : "—"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleView(asset.id)}
-                          className="h-8 w-8 p-0"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
+                        <ChevronLeft className="h-4 w-4 mr-1" />
+                        Previous
+                      </Button>
+                      <div className="flex gap-2">
                         <Button
                           variant="outline"
                           onClick={() => setEditDialogOpen(false)}
@@ -7570,548 +7330,11 @@ export function AssetManagement() {
                         >
                           Save Changes
                         </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Asset Details</DialogTitle>
-            <DialogDescription>
-              Comprehensive view of {viewAsset?.name}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="flex-1 overflow-y-auto px-6 py-4">
-            {viewAsset && (
-              <div className="space-y-6">
-                {/* Basic Information */}
-                <div className="space-y-3">
-                  <h3 className="text-lg font-semibold border-b pb-2">
-                    Basic Information
-                  </h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Asset Name
-                      </Label>
-                      <p className="font-medium">{viewAsset.name}</p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Asset Code
-                      </Label>
-                      <p className="font-medium">
-                        {viewAsset.serialId || viewAsset.id || "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Title</Label>
-                      <p className="font-medium">{viewAsset.title || "—"}</p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Type</Label>
-                      <Badge variant="outline">{viewAsset.type || "—"}</Badge>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Status</Label>
-                      <Badge
-                        variant={
-                          viewAsset.status === "published"
-                            ? "default"
-                            : "secondary"
-                        }
-                      >
-                        {viewAsset.status || "—"}
-                      </Badge>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Project Status
-                      </Label>
-                      <p className="font-medium">
-                        {viewAsset.projectStatus || "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Location</Label>
-                      <p className="font-medium">{viewAsset.location || "—"}</p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Company</Label>
-                      <p className="font-medium">
-                        {viewAsset.company?.name || "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Property Category
-                      </Label>
-                      <p className="font-medium">
-                        {viewAsset.propertyCategory || "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Created</Label>
-                      <p className="text-sm">
-                        {formatDate(viewAsset.createdAt)}
-                      </p>
-                    </div>
-                    <div className="col-span-2">
-                      <Label className="text-muted-foreground">Address</Label>
-                      <p className="text-sm">{viewAsset.address || "—"}</p>
-                    </div>
-                    <div className="col-span-2">
-                      <Label className="text-muted-foreground">
-                        Description
-                      </Label>
-                      <p className="text-sm">{viewAsset.description || "—"}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Physical Details */}
-                <div className="space-y-3">
-                  <h3 className="text-lg font-semibold border-b pb-2">
-                    Physical Details
-                  </h3>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Land Size (sqm)
-                      </Label>
-                      <p className="font-medium">{viewAsset.landSize || "—"}</p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Built Size (sqm)
-                      </Label>
-                      <p className="font-medium">
-                        {viewAsset.builtSize || "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Area (sq m)
-                      </Label>
-                      <p className="font-medium">{viewAsset.area || "—"}</p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Total Units
-                      </Label>
-                      <p className="font-medium">
-                        {viewAsset.totalUnits || "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Available Units
-                      </Label>
-                      <p className="font-medium">
-                        {viewAsset.availableUnits || "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Unit Configuration
-                      </Label>
-                      <p className="font-medium">
-                        {viewAsset.unitConfiguration || "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Bedrooms</Label>
-                      <p className="font-medium">{viewAsset.bedrooms || "—"}</p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Bathrooms</Label>
-                      <p className="font-medium">
-                        {viewAsset.bathrooms || "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Parking</Label>
-                      <p className="font-medium">{viewAsset.parking || "—"}</p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Furnished</Label>
-                      <p className="font-medium">
-                        {viewAsset.furnished || "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Facility Management
-                      </Label>
-                      <p className="font-medium">
-                        {viewAsset.facilityManagement === true
-                          ? "Yes"
-                          : viewAsset.facilityManagement === false
-                            ? "No"
-                            : "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Construction Start
-                      </Label>
-                      <p className="font-medium">
-                        {viewAsset.constructionStart
-                          ? formatDate(viewAsset.constructionStart)
-                          : "—"}
-                      </p>
-                    </div>
-                    <div className="col-span-3">
-                      <Label className="text-muted-foreground">
-                        Facilities
-                      </Label>
-                      <div className="flex flex-wrap gap-2 mt-1">
-                        {viewAsset.facilities?.length > 0 ? (
-                          viewAsset.facilities.map((f: string) => (
-                            <Badge key={f} variant="outline">
-                              {f}
-                            </Badge>
-                          ))
-                        ) : (
-                          <span className="text-sm">—</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Pricing & Investment */}
-                <div className="space-y-3">
-                  <h3 className="text-lg font-semibold border-b pb-2">
-                    Pricing & Investment
-                  </h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Ownership Type
-                      </Label>
-                      <p className="font-medium">
-                        {viewAsset.ownershipType || "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Total Fractions
-                      </Label>
-                      <p className="font-medium">
-                        {viewAsset.fractionTotal || "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Price</Label>
-                      <p className="font-medium">
-                        {viewAsset.price
-                          ? `₦${Number(viewAsset.price).toLocaleString()}`
-                          : "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Markup</Label>
-                      <p className="font-medium">
-                        {viewAsset.markup
-                          ? `₦${Number(viewAsset.markup).toLocaleString()}`
-                          : "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Price Range
-                      </Label>
-                      <p className="font-medium">
-                        {viewAsset.priceRange || "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Fraction Cost
-                      </Label>
-                      <p className="font-medium">
-                        {viewAsset.fractionCost
-                          ? `₦${Number(viewAsset.fractionCost).toLocaleString()}`
-                          : "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Down Payment
-                      </Label>
-                      <p className="font-medium">
-                        {viewAsset.downPaymentAmount
-                          ? `₦${Number(viewAsset.downPaymentAmount).toLocaleString()}`
-                          : "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Funding Status
-                      </Label>
-                      <p className="font-medium">
-                        {viewAsset.fundingStatus
-                          ? `${viewAsset.fundingStatus}%`
-                          : "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Off-plan Discount
-                      </Label>
-                      <p className="font-medium">
-                        {viewAsset.offPlanDiscount
-                          ? `${viewAsset.offPlanDiscount}%`
-                          : "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Stage-based Discount
-                      </Label>
-                      <p className="font-medium">
-                        {viewAsset.stageBasedDiscount
-                          ? `${viewAsset.stageBasedDiscount}%`
-                          : "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Lead Commission
-                      </Label>
-                      <p className="font-medium">
-                        {viewAsset.leadCommission
-                          ? `${viewAsset.leadCommission}%`
-                          : "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Closer Commission
-                      </Label>
-                      <p className="font-medium">
-                        {viewAsset.closerCommission
-                          ? `${viewAsset.closerCommission}%`
-                          : "—"}
-                      </p>
-                    </div>
-                    <div className="col-span-2">
-                      <Label className="text-muted-foreground">
-                        Payment Options
-                      </Label>
-                      <div className="flex flex-wrap gap-2 mt-1">
-                        {viewAsset.paymentOptions?.length > 0 ? (
-                          viewAsset.paymentOptions.map((o: string) => (
-                            <Badge key={o} variant="outline">
-                              {o}
-                            </Badge>
-                          ))
-                        ) : (
-                          <span className="text-sm">—</span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="col-span-2">
-                      <Label className="text-muted-foreground">
-                        Installment Periods
-                      </Label>
-                      <div className="flex flex-wrap gap-2 mt-1">
-                        {viewAsset.installmentPeriods?.length > 0 ? (
-                          viewAsset.installmentPeriods.map((p: string) => (
-                            <Badge key={p} variant="outline">
-                              {p}
-                            </Badge>
-                          ))
-                        ) : (
-                          <span className="text-sm">—</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Financial Returns */}
-                <div className="space-y-3">
-                  <h3 className="text-lg font-semibold border-b pb-2">
-                    Financial Returns
-                  </h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Projected Rental Income
-                      </Label>
-                      <p className="font-medium text-accent">
-                        {viewAsset.projectedRentalIncome
-                          ? `₦${Number(viewAsset.projectedRentalIncome).toLocaleString()}`
-                          : "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Rental Frequency
-                      </Label>
-                      <p className="font-medium">
-                        {viewAsset.rentalFrequency || "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Operating Cost (yearly)
-                      </Label>
-                      <p className="font-medium">
-                        {viewAsset.operatingCost
-                          ? `₦${Number(viewAsset.operatingCost).toLocaleString()}`
-                          : "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">
-                        First Payout Date
-                      </Label>
-                      <p className="font-medium">
-                        {viewAsset.firstPayoutDate
-                          ? formatDate(viewAsset.firstPayoutDate)
-                          : "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Rental Yield
-                      </Label>
-                      <p className="font-medium">
-                        {viewAsset.rentalYield
-                          ? `${viewAsset.rentalYield}%`
-                          : "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Rental Yield (Min - Max)
-                      </Label>
-                      <p className="font-medium">
-                        {viewAsset.rentalYieldMin && viewAsset.rentalYieldMax
-                          ? `${viewAsset.rentalYieldMin}% - ${viewAsset.rentalYieldMax}%`
-                          : "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Capital Appreciation
-                      </Label>
-                      <p className="font-medium">
-                        {viewAsset.capitalAppreciation
-                          ? `${viewAsset.capitalAppreciation}%`
-                          : "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Capital Appreciation (Min - Max)
-                      </Label>
-                      <p className="font-medium">
-                        {viewAsset.capitalAppreciationMin &&
-                          viewAsset.capitalAppreciationMax
-                          ? `${viewAsset.capitalAppreciationMin}% - ${viewAsset.capitalAppreciationMax}%`
-                          : "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Total Returns (Min - Max)
-                      </Label>
-                      <p className="font-medium text-accent">
-                        {viewAsset.totalReturnsMin && viewAsset.totalReturnsMax
-                          ? `${viewAsset.totalReturnsMin}% - ${viewAsset.totalReturnsMax}%`
-                          : "—"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Risk Assessment */}
-                <div className="space-y-3">
-                  <h3 className="text-lg font-semibold border-b pb-2">
-                    Risk Assessment
-                  </h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Risk Level
-                      </Label>
-                      <Badge
-                        variant="outline"
-                        className={
-                          viewAsset.riskLevel?.toLowerCase() === "low"
-                            ? "border-accent text-accent"
-                            : viewAsset.riskLevel?.toLowerCase() === "medium"
-                              ? "border-warning text-warning"
-                              : "border-destructive text-destructive"
-                        }
-                      >
-                        {viewAsset.riskLevel || "—"}
-                      </Badge>
-                    </div>
-                    {viewAsset.type !== "Land" &&
-                      viewAsset.type !== "Completed" &&
-                      viewAsset.projectStatus !== "Completed" &&
-                      viewAsset.projectStatus !== "Available" && (
-                        <div>
-                          <Label className="text-muted-foreground">
-                            Construction Stage
-                          </Label>
-                          <p className="font-medium">
-                            {viewAsset.constructionStage || "—"}
-                          </p>
-                        </div>
-                      )}
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Exit Liquidity
-                      </Label>
-                      <p className="font-medium">
-                        {viewAsset.exitLiquidity || "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">
-                        Management Mode
-                      </Label>
-                      <p className="font-medium">
-                        {viewAsset.managementMode || "—"}
-                      </p>
-                    </div>
-                    <div className="col-span-2">
-                      <Label className="text-muted-foreground">
-                        Off-plan Security
-                      </Label>
-                      <p className="text-sm">
-                        {viewAsset.offPlanSecurity || "—"}
-                      </p>
-                    </div>
-                    <div className="col-span-2">
-                      <Label className="text-muted-foreground">
-                        Risk Factors
-                      </Label>
-                      <div className="flex flex-wrap gap-2 mt-1">
-                        {viewAsset.riskFactors?.length > 0 ? (
-                          viewAsset.riskFactors.map((f: string) => (
-                            <Badge
-                              key={f}
-                              variant="outline"
-                              className="border-warning text-warning"
-                            >
-                              {f}
-                            </Badge>
-                          ))
+                        {currentStep < totalSteps ? (
+                          <Button onClick={nextStep}>
+                            Next
+                            <ChevronRight className="h-4 w-4 ml-1" />
+                          </Button>
                         ) : (
                           <Button onClick={handleUpdate} disabled={loading}>
                             {formData.status === "published"
