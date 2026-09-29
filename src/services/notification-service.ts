@@ -2,7 +2,12 @@
 // which uses the configured axios instance with auth headers.
 // Use notificationsApi from api-service.ts for all notification operations.
 
-import { api } from '@/utils/api-service';
+// Vite projects use import.meta.env.VITE_* — not process.env.NEXT_PUBLIC_*
+// const API_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8080';
+
+const currentUrl = window.location.href;
+const API_URL = currentUrl.includes('admin-git-development-uptipros-projects') ? 'https://buyops-backend-development.up.railway.app/' : currentUrl.includes('localhost') ? 'http://localhost:1000' : import.meta.env.VITE_API_URL
+
 
 class NotificationService {
   private async fetch(url: string, options?: RequestInit) {
