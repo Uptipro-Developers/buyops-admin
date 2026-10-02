@@ -6,6 +6,7 @@ import {
   ReactNode,
 } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import { authApi, setAccessToken } from "../../utils/api-service";
 
 interface User {
@@ -57,16 +58,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsReady(true);
       return;
     }
+    let cachedUser: User;
+    try {
+      cachedUser = JSON.parse(storedUser) as User;
+    } catch {
+      localStorage.removeItem("buyops_user");
+      setIsReady(true);
+      return;
+    }
+
     authApi.refreshSession()
       .then((session) => {
-        if (session.user?.role?.toUpperCase() !== "ADMIN") throw new Error("Not an admin");
+        if (session.user?.role?.toUpperCase() !== "ADMIN") {
+          localStorage.removeItem("buyops_user");
+          setAccessToken(null);
+          setUser(null);
+          return;
+        }
         localStorage.setItem("buyops_user", JSON.stringify(session.user));
         setUser(session.user);
       })
-      .catch(() => {
-        localStorage.removeItem("buyops_user");
-        setAccessToken(null);
-        setUser(null);
+      .catch((error: unknown) => {
+        const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+        if (status === 401 || status === 403) {
+          localStorage.removeItem("buyops_user");
+          setAccessToken(null);
+          setUser(null);
+          return;
+        }
+
+        // Preserve the signed-in UI for temporary network/CORS/server failures.
+        // API calls can refresh the token again once the backend is reachable.
+        setUser(cachedUser);
       })
       .finally(() => setIsReady(true));
   }, []);

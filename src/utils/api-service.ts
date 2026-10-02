@@ -27,6 +27,11 @@ const refreshClient = axios.create({
 let accessToken: string | null = null;
 let refreshPromise: Promise<string> | null = null;
 
+const isSessionRejected = (error: unknown) => {
+  if (!axios.isAxiosError(error)) return false;
+  return error.response?.status === 401 || error.response?.status === 403;
+};
+
 export const setAccessToken = (token: string | null) => {
   accessToken = token;
 };
@@ -64,10 +69,15 @@ api.interceptors.response.use(
         originalRequest.headers.Authorization = `Bearer ${access_token}`;
         return api(originalRequest);
       } catch (refreshError) {
-        localStorage.removeItem('buyops_user');
-        setAccessToken(null);
-        if (window.location.pathname !== '/sign-in') {
-          window.location.href = '/sign-in?reason=session-expired';
+        // A timeout, CORS failure, or temporary 5xx response does not prove that
+        // the session has expired. Only clear the session when the API explicitly
+        // rejects the refresh token.
+        if (isSessionRejected(refreshError)) {
+          localStorage.removeItem('buyops_user');
+          setAccessToken(null);
+          if (window.location.pathname !== '/sign-in') {
+            window.location.href = '/sign-in?reason=session-expired';
+          }
         }
         return Promise.reject(refreshError);
       }
