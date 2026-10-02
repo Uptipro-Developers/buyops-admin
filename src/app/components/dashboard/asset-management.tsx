@@ -740,53 +740,115 @@ export function AssetManagement() {
   };
 
   // Step Navigation & Validation
-  const validateStep1 = () => {
-    if (!formData.name.trim()) {
-      toast.error("Please enter the Asset Name");
-      return false;
-    }
-    if (!formData.developmentStage) {
-      toast.error("Please select the Development Stage");
-      return false;
-    }
-    if (!formData.type) {
-      toast.error("Please select the Asset Type");
-      return false;
-    }
-    if (!formData.projectStatus) {
-      toast.error("Please select the Project Status");
-      return false;
-    }
-    if (!formData.company) {
-      toast.error("Please select a Developer / Partner Company");
-      return false;
-    }
-    if (!formData.location.trim()) {
-      toast.error("Please enter the Location");
-      return false;
-    }
-    return true;
+  const hasValue = (value: unknown) =>
+    value !== undefined && value !== null && String(value).trim() !== "";
+
+  const isNonNegativeNumber = (value: unknown) =>
+    hasValue(value) && Number.isFinite(Number(value)) && Number(value) >= 0;
+
+  const isPositiveNumber = (value: unknown) =>
+    hasValue(value) && Number.isFinite(Number(value)) && Number(value) > 0;
+
+  const requireValue = (condition: boolean, message: string) => {
+    if (condition) return true;
+    toast.error(message);
+    return false;
   };
 
-  const validateStep3 = () => {
-    if (formData.buyingPaths.length === 0) {
-      toast.error("Select at least one Buying Path — Investment or Ownership");
-      return false;
+  const validateStep = (step: number) => {
+    switch (step) {
+      case 1:
+        return (
+          requireValue(hasValue(formData.developmentStage), "Please select the Development Stage") &&
+          requireValue(hasValue(formData.name), "Please enter the Asset Name") &&
+          requireValue(hasValue(formData.referenceCode), "Please enter the Asset Reference Code") &&
+          requireValue(hasValue(formData.type), "Please select the Asset Type") &&
+          requireValue(hasValue(formData.projectStatus), "Please select the Project Status") &&
+          requireValue(hasValue(formData.location), "Please enter the Location") &&
+          requireValue(hasValue(formData.address), "Please enter the Full Address") &&
+          requireValue(hasValue(formData.company), "Please select a Developer / Partner Company")
+        );
+      case 2:
+        return (
+          requireValue(hasValue(formData.propertyCategory), "Please select the Property Category") &&
+          requireValue(isPositiveNumber(formData.totalUnits), "Total Units / Rooms must be greater than zero") &&
+          requireValue(formData.unitConfiguration.length > 0, "Select at least one Unit Configuration") &&
+          requireValue(hasValue(formData.furnishingStatus), "Please select the Furnishing Status")
+        );
+      case 3: {
+        if (!requireValue(hasValue(formData.platform), "Please select the Investment Program")) return false;
+        if (!requireValue(formData.buyingPaths.length > 0, "Select at least one Buying Path — Investment or Ownership")) return false;
+
+        if (formData.buyingPaths.includes("Investment")) {
+          if (!requireValue(hasValue(formData.ownershipType), "Please select the Interest Structure")) return false;
+          if (formData.ownershipType === "Fractional") {
+            if (formData.type === "Land") {
+              if (!requireValue(hasValue(formData.landUnitType), "Please select the Land Units")) return false;
+              if (!requireValue(isPositiveNumber(formData.landUnitCount), "Number of Units must be greater than zero")) return false;
+            } else {
+              if (!requireValue(isPositiveNumber(formData.fractionTotal), "Total Fractions must be greater than zero")) return false;
+              if (!requireValue(isPositiveNumber(formData.costPerFraction), "Cost per Fraction must be greater than zero")) return false;
+            }
+          }
+        }
+
+        if (formData.buyingPaths.includes("Ownership")) {
+          if (!requireValue(hasValue(formData.releaseBasis), "Please select the Payment Release Basis")) return false;
+          if (formData.releaseBasis === "Milestone-linked") {
+            if (!requireValue(formData.milestones.length > 0, "Add at least one milestone for milestone-linked payments")) return false;
+            if (!requireValue(formData.milestones.every((milestone) => hasValue(milestone.name)), "Enter a name for every milestone")) return false;
+            if (!requireValue(formData.milestones.every((milestone) => isPositiveNumber(milestone.releasePct)), "Enter a release percentage for every milestone")) return false;
+            if (!requireValue(Math.abs(milestoneReleaseTotal - 100) < 0.0001, "Milestone release percentages must total 100%")) return false;
+          }
+        }
+        return true;
+      }
+      case 4:
+        if (!requireValue(isPositiveNumber(formData.basePrice), "Base Asset Value must be greater than zero")) return false;
+        if (!requireValue(isNonNegativeNumber(formData.markup), "Please select or enter the BuyOps Markup")) return false;
+        if (!requireValue(formData.paymentOptions.length > 0, "Select at least one Payment Option")) return false;
+        if (formData.paymentOptions.includes("Scheduled Tranche")) {
+          if (!requireValue(isPositiveNumber(formData.downPaymentAmount), "Down Payment Amount must be greater than zero")) return false;
+          if (!requireValue(formData.installmentPeriods.length > 0, "Select at least one Allowed Payment Period")) return false;
+        }
+        return true;
+      case 5:
+        return (
+          requireValue(isNonNegativeNumber(formData.projectedRentalIncome), "Enter the Projected Rental Income") &&
+          requireValue(hasValue(formData.rentalFrequency), "Please select the Rental Frequency") &&
+          requireValue(isNonNegativeNumber(formData.operatingCost), "Enter the Operating Cost Assumptions") &&
+          requireValue(isNonNegativeNumber(formData.capitalAppreciation), "Enter the Capital Appreciation")
+        );
+      case 6:
+        return (
+          requireValue(hasValue(formData.riskLevel), "Please select the Risk Level") &&
+          requireValue(hasValue(formData.exitLiquidity), "Please select the Exit Liquidity Settings") &&
+          requireValue(hasValue(formData.managementMode), "Please select the Management Mode")
+        );
+      case 7:
+        return true;
+      case 8:
+        return (
+          requireValue(isNonNegativeNumber(formData.leadCommission), "Enter the Lead Commission") &&
+          requireValue(isNonNegativeNumber(formData.closerCommission), "Enter the Deal Closer Commission")
+        );
+      default:
+        return true;
     }
-    if (
-      formData.buyingPaths.includes("Ownership") &&
-      formData.releaseBasis === "Milestone-linked" &&
-      formData.milestones.filter((m) => m.name.trim() && m.releasePct).length === 0
-    ) {
-      toast.error("Add at least one milestone — Ownership payments are milestone-linked");
-      return false;
+  };
+
+  const validateAllSteps = () => {
+    for (let step = 1; step <= 8; step += 1) {
+      if (!validateStep(step)) {
+        setCurrentStep(step);
+        return false;
+      }
     }
     return true;
   };
 
   const nextStep = () => {
-    if (currentStep === 1 && !validateStep1()) return;
-    if (currentStep === 3 && !validateStep3()) return;
+    if (!validateStep(currentStep)) return;
     if (currentStep < totalSteps) setCurrentStep((prev) => prev + 1);
   };
 
@@ -830,11 +892,7 @@ export function AssetManagement() {
   };
 
   const handleSubmit = async (statusOverride?: string) => {
-    if (!formData.name || !formData.company) {
-      toast.error("Please complete basic asset details in Step 1.");
-      setCurrentStep(1);
-      return;
-    }
+    if (!validateAllSteps()) return;
     setLoading(true);
     setError(null);
     try {
@@ -979,7 +1037,7 @@ export function AssetManagement() {
           `${asset.platform || "Urbco Foundry"}-managed`,
         leadCommission: asset.leadCommission?.toString() || "2.5",
         closerCommission: asset.closerCommission?.toString() || "1.5",
-        status: asset.status || "active",
+        status: asset.status === "published" ? "published" : "draft",
       });
       setEditDialogOpen(true);
       setCurrentStep(1);
@@ -990,15 +1048,26 @@ export function AssetManagement() {
 
   const handleUpdate = async () => {
     if (!selectedAssetId) return;
+    if (!validateAllSteps()) return;
     setLoading(true);
     setError(null);
     try {
-      await assetsApi.update(selectedAssetId, buildAssetPayload(formData));
+      const updatedAsset = await assetsApi.update(selectedAssetId, buildAssetPayload(formData));
+      if (updatedAsset.status !== formData.status) {
+        throw new Error(`Asset status was not updated to ${formData.status}`);
+      }
+      setAssets((current) =>
+        current.map((asset) => asset.id === selectedAssetId ? updatedAsset : asset),
+      );
       await fetchAssets();
       setEditDialogOpen(false);
       setSelectedAssetId(null);
       setFormData(INITIAL_FORM_DATA);
-      toast.success("Asset updated successfully");
+      toast.success(
+        formData.status === "published"
+          ? "Asset published successfully"
+          : "Asset saved as draft",
+      );
     } catch (err: any) {
       const msg = extractError(err);
       setError(msg);

@@ -13,6 +13,7 @@ const URL = currentUrl.includes('admin-git-development-uptipros-projects') ? 'ht
 
 export const api = axios.create({
   baseURL: URL,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -20,6 +21,7 @@ export const api = axios.create({
 
 const refreshClient = axios.create({
   baseURL: URL,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
