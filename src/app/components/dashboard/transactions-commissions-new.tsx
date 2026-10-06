@@ -430,7 +430,7 @@ export function TransactionsCommissions() {
                       <TableHead>Amount</TableHead>
                       <TableHead>Payment Type</TableHead>
                       <TableHead>Commission</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>Payment Status</TableHead>
                       <TableHead>Date</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -479,21 +479,21 @@ export function TransactionsCommissions() {
                         <TableCell>
                           <Badge
                             variant={
-                              transaction.status === "completed"
+                              (transaction.paymentStatus || transaction.transactionStatus || transaction.status) === "completed"
                                 ? "default"
-                                : transaction.status === "pending"
+                                : (transaction.paymentStatus || transaction.transactionStatus || transaction.status) === "pending"
                                   ? "secondary"
                                   : "outline"
                             }
                             className={
-                              transaction.status === "completed"
+                              (transaction.paymentStatus || transaction.transactionStatus || transaction.status) === "completed"
                                 ? "bg-accent text-accent-foreground"
-                                : transaction.status === "pending"
+                              : (transaction.paymentStatus || transaction.transactionStatus || transaction.status) === "pending"
                                   ? "bg-warning text-warning-foreground"
                                   : ""
                             }
                           >
-                            {transaction.status}
+                            {transaction.paymentStatus || transaction.transactionStatus || transaction.status}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
