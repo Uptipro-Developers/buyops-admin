@@ -167,6 +167,23 @@ export const authApi = {
   },
 };
 
+export const kycApi = {
+  list: async (filters?: { status?: string; entityType?: string; search?: string }) =>
+    (await api.get('/admin/kyc', { params: filters })).data,
+  stats: async () => (await api.get('/admin/kyc/stats')).data,
+  detail: async (caseId: string) => (await api.get(`/admin/kyc/${caseId}`)).data,
+  decideDocument: async (documentId: string, decision: 'APPROVED' | 'REJECTED', reason?: string) =>
+    (await api.post(`/admin/kyc/documents/${documentId}/decision`, { decision, reason })).data,
+  approve: async (caseId: string) => (await api.post(`/admin/kyc/${caseId}/approve`)).data,
+  remediate: async (caseId: string, items: Array<{ requirementCode: string; category: 'PROFILE' | 'DOCUMENT' | 'DECLARATION'; label: string; reason: string }>) =>
+    (await api.post(`/admin/kyc/${caseId}/remediation`, { items })).data,
+  reject: async (caseId: string, reason: string) =>
+    (await api.post(`/admin/kyc/${caseId}/reject`, { reason })).data,
+  remind: async (caseId: string) => (await api.post(`/admin/kyc/${caseId}/remind`)).data,
+  downloadDocument: async (documentId: string) =>
+    (await api.get(`/admin/kyc/documents/${documentId}/download`, { responseType: 'blob' })).data as Blob,
+};
+
 // ══════════════════════════════════════════════════════════════════════════
 // DASHBOARD API
 // ══════════════════════════════════════════════════════════════════════════

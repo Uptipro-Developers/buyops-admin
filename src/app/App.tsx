@@ -28,6 +28,7 @@ import {
   Sun,
   Users,
   FileText,
+  ShieldCheck,
 } from "lucide-react";
 import {
   BrowserRouter,
@@ -53,6 +54,7 @@ const LeadManagement = lazy(() => import("./components/dashboard/lead-management
 const Settings = lazy(() => import("./components/dashboard/settings").then((m) => ({ default: m.Settings })));
 const ProfilePage = lazy(() => import("./components/profile-page").then((m) => ({ default: m.ProfilePage })));
 const PaymentCallback = lazy(() => import("./components/payment-callback").then((m) => ({ default: m.PaymentCallback })));
+const KycManagement = lazy(() => import("./components/dashboard/kyc-management").then((m) => ({ default: m.KycManagement })));
 
 // FIXED NAVIGATION GROUPS
 const navigationGroups = [
@@ -85,6 +87,11 @@ const navigationGroups = [
       { name: "Transactions", icon: Receipt, id: "transactions" },
       { name: "Installment Plans", icon: CreditCard, id: "installments" },
     ],
+  },
+  {
+    name: "Compliance",
+    id: "compliance",
+    items: [{ name: "KYC Review", icon: ShieldCheck, id: "kyc" }],
   },
   {
     name: "Reports",
@@ -305,6 +312,7 @@ function DashboardContent() {
               <Route path="/leads" element={<LeadManagement />} />
               <Route path="/clusters" element={<Clusters />} />
               <Route path="/users" element={<UserManagement />} />
+              <Route path="/kyc" element={<KycManagement />} />
               <Route
                 path="/transactions"
                 element={<TransactionsCommissions />}
